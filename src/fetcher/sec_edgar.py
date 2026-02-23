@@ -428,6 +428,29 @@ _CUSIP_TICKER_MAP = {
     "149123101": "CAT",  # Caterpillar
     "243893300": "DE",   # Deere
     "902973304": "UPS",  # UPS
+    # Guru favorites — commonly held
+    "674599105": "OXY",  # Occidental Petroleum
+    "48251W104": "KHC",  # Kraft Heinz
+    "16119P108": "CHTR", # Charter Communications
+    "615369105": "MCO",  # Moody's
+    "23918K108": "DVA",  # DaVita
+    "49338L103": "KR",   # Kroger
+    "92276F100": "VRSN", # VeriSign
+    "872898104": "TMUS", # T-Mobile
+    "580135101": "MCD",  # McDonald's
+    "22160N109": "COST", # Costco (alt CUSIP)
+    "896522109": "TRIP", # TripAdvisor
+    "053015103": "ATVI", # Activision (now MSFT)
+    "46625H100": "JPM",  # JPMorgan Chase
+    "808524409": "SCHW", # Charles Schwab (alt)
+    "053332102": "SNOW", # Snowflake
+    "69608A108": "PLTR", # Palantir
+    "09857L108": "BKNG", # Booking Holdings
+    "571903202": "MAR",  # Marriott
+    "458140100": "INTU", # Intuit
+    "78467J100": "NOW",  # ServiceNow
+    "64110L106": "NFLX", # Netflix
+    "543859103": "LOW",  # Lowe's
 }
 
 
@@ -678,3 +701,86 @@ def fetch_filing_changes(cik: str) -> Optional[Dict[str, Any]]:
     # For now, return None — full QoQ comparison is complex
     # This can be expanded later
     return None
+
+
+# ═══════════════════════════════════════════════════════════
+#  Public API — Guru Overlap (most commonly held stocks)
+# ═══════════════════════════════════════════════════════════
+
+def fetch_guru_overlap_top(top_n: int = 5) -> List[Dict[str, Any]]:
+    """
+    Aggregate all 15 guru portfolios and find stocks held by the most gurus.
+
+    Returns
+    -------
+    [
+        {
+            "ticker": str,
+            "name": str,
+            "cusip": str,
+            "guru_count": int,
+            "gurus": [str, ...],
+            "total_value": int,
+        }, ...
+    ]
+    Sorted by guru_count desc, then total_value desc.
+    Results cached for 24h under key "guru_overlap_top" in _filing_cache.
+    """
+    cache_key = f"guru_overlap_top_{top_n}"
+    cached = _filing_cache.get(cache_key)
+    if cached:
+        age = time.time() - cached.get("_ts", 0)
+        if age < 86400:
+            return cached["data"]
+
+    # Aggregate across all gurus
+    # Key: ticker (uppercased) → aggregation dict
+    agg: Dict[str, Dict[str, Any]] = {}
+
+    for investor_name, cik in GURU_INVESTORS.items():
+        try:
+            filing = fetch_latest_13f(cik)
+            if not filing or not filing.get("holdings"):
+                continue
+
+            holdings = _resolve_tickers_in_holdings(filing["holdings"])
+
+            seen_tickers = set()  # one entry per guru per ticker
+            for h in holdings:
+                if h.get("option_type", "") != "":
+                    continue  # skip options
+                ticker = h.get("ticker")
+                if not ticker:
+                    continue  # skip unresolved
+                ticker = ticker.upper()
+                if ticker in seen_tickers:
+                    continue
+                seen_tickers.add(ticker)
+
+                if ticker not in agg:
+                    agg[ticker] = {
+                        "ticker": ticker,
+                        "name": h.get("name", ""),
+                        "cusip": h.get("cusip", ""),
+                        "guru_count": 0,
+                        "gurus": [],
+                        "total_value": 0,
+                    }
+                agg[ticker]["guru_count"] += 1
+                agg[ticker]["gurus"].append(investor_name)
+                agg[ticker]["total_value"] += h.get("value_usd", 0)
+
+        except Exception:
+            continue
+
+    # Sort: guru_count desc → total_value desc
+    ranked = sorted(
+        agg.values(),
+        key=lambda x: (x["guru_count"], x["total_value"]),
+        reverse=True,
+    )
+    result = ranked[:top_n]
+
+    # Cache result
+    _filing_cache[cache_key] = {"data": result, "_ts": time.time()}
+    return result

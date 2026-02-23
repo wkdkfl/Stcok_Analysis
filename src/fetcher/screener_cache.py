@@ -256,14 +256,31 @@ def _get_fallback_tickers(name: str) -> List[Dict[str, str]]:
 
 
 # ═══════════════════════════════════════════════════════════
-# LIGHTWEIGHT DATA FETCHING
+# LIGHTWEIGHT DATA FETCHING (with in-memory cache)
 # ═══════════════════════════════════════════════════════════
+
+_light_info_cache: Dict[str, Any] = {}  # {ticker: {"data": ..., "_ts": float}}
+_LIGHT_INFO_TTL = 14400  # 4 hours
+
 
 def fetch_light_info(ticker: str) -> Optional[Dict[str, Any]]:
     """
     Fetch lightweight stock info (.info only, no statements/history).
     Returns a flat dict with key financial metrics, or None on failure.
+    Cached in-memory for 4 hours.
     """
+    ticker = ticker.upper().strip()
+    cached = _light_info_cache.get(ticker)
+    if cached and (time.time() - cached.get("_ts", 0)) < _LIGHT_INFO_TTL:
+        return cached["data"]
+
+    result = _fetch_light_info_raw(ticker)
+    _light_info_cache[ticker] = {"data": result, "_ts": time.time()}
+    return result
+
+
+def _fetch_light_info_raw(ticker: str) -> Optional[Dict[str, Any]]:
+    """Raw fetch without cache."""
     try:
         from src.fetcher.ssl_session import get_session
         t = yf.Ticker(ticker, session=get_session())

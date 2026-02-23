@@ -119,3 +119,39 @@ SCREENER_CACHE_TTL = 86400  # 24h
 # ── UI ───────────────────────────────────────────────────────
 CACHE_TTL = 3600  # 초단위
 MAX_TICKERS = 10
+MAX_PORTFOLIO_TICKERS = 30
+
+# ── Portfolio & Backtest ─────────────────────────────────────
+BENCHMARKS = {
+    "S&P 500 (SPY)": "SPY",
+    "NASDAQ 100 (QQQ)": "QQQ",
+    "Dow Jones (DIA)": "DIA",
+    "Russell 2000 (IWM)": "IWM",
+}
+
+BACKTEST_DEFAULTS = {
+    "initial_capital": 100_000,
+    "transaction_cost": 0.001,  # 0.1%
+    "rebalance_freq": "M",     # Monthly
+}
+
+STRATEGY_NAMES = {
+    "동일 비중 (Equal Weight)": "equal_weight",
+    "모멘텀 (12-1M)": "momentum",
+    "MA 크로스오버 (50/200)": "ma_crossover",
+    "스크리너 등급 기반": "screener_grade",
+}
+
+WEIGHT_SCHEME_NAMES = {
+    "동일 비중": "equal",
+    "시가총액 비중": "market_cap",
+    "역변동성 비중": "inverse_vol",
+    "리스크 패리티": "risk_parity",
+}
+
+REBALANCE_FREQ_MAP = {
+    "월간 (Monthly)": "M",
+    "분기 (Quarterly)": "Q",
+    "반기 (6-Month)": "6M",
+    "연간 (Yearly)": "Y",
+}

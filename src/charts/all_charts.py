@@ -432,3 +432,179 @@ def chart_comparison_heatmap(tickers_data: List[Dict[str, Any]],
     )
 
     return fig
+
+
+# ═══════════════════════════════════════════════════════════
+# PORTFOLIO / BACKTEST CHARTS
+# ═══════════════════════════════════════════════════════════
+
+def chart_portfolio_equity_curve(
+    nav: "pd.Series",
+    benchmark_nav: "pd.Series" = None,
+    title: str = "포트폴리오 수익률 곡선",
+) -> go.Figure:
+    """Equity-curve line chart — portfolio NAV vs benchmark."""
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=nav.index, y=nav.values,
+        mode="lines", name="Portfolio",
+        line=dict(color=COLORS["primary"], width=2),
+    ))
+    if benchmark_nav is not None and not benchmark_nav.empty:
+        fig.add_trace(go.Scatter(
+            x=benchmark_nav.index, y=benchmark_nav.values,
+            mode="lines", name="Benchmark",
+            line=dict(color=COLORS["secondary"], width=1.5, dash="dot"),
+        ))
+    fig.update_layout(
+        title=title,
+        xaxis_title="Date",
+        yaxis_title="NAV ($)",
+        hovermode="x unified",
+        height=420,
+        margin=dict(l=50, r=20, t=50, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
+
+
+def chart_portfolio_drawdown(nav: "pd.Series", title: str = "드로우다운") -> go.Figure:
+    """Drawdown area chart from NAV series."""
+    daily_ret = nav.pct_change().fillna(0)
+    cum = (1 + daily_ret).cumprod()
+    dd = (cum / cum.cummax() - 1) * 100
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=dd.index, y=dd.values,
+        fill="tozeroy",
+        mode="lines",
+        name="Drawdown",
+        line=dict(color=COLORS["red"], width=1),
+        fillcolor="rgba(244,67,54,0.25)",
+    ))
+    fig.update_layout(
+        title=title,
+        xaxis_title="Date",
+        yaxis_title="Drawdown (%)",
+        height=300,
+        margin=dict(l=50, r=20, t=50, b=40),
+    )
+    return fig
+
+
+def chart_correlation_heatmap(corr: "pd.DataFrame", title: str = "종목 간 상관관계") -> go.Figure:
+    """Correlation matrix heatmap."""
+    fig = go.Figure(data=go.Heatmap(
+        z=corr.values,
+        x=list(corr.columns),
+        y=list(corr.index),
+        text=corr.round(2).values,
+        texttemplate="%{text}",
+        textfont={"size": 11},
+        colorscale=[[0, "#F44336"], [0.5, "#FFFFFF"], [1, "#4CAF50"]],
+        zmin=-1, zmax=1,
+        showscale=True,
+    ))
+    fig.update_layout(
+        title=title,
+        height=max(350, len(corr) * 40),
+        margin=dict(l=80, r=20, t=50, b=40),
+    )
+    return fig
+
+
+def chart_weight_allocation(
+    weights: Dict[str, float],
+    title: str = "포트폴리오 비중",
+) -> go.Figure:
+    """Pie/donut chart of portfolio weight allocation."""
+    labels = list(weights.keys())
+    values = [w * 100 for w in weights.values()]
+
+    fig = go.Figure(data=go.Pie(
+        labels=labels,
+        values=values,
+        hole=0.4,
+        textinfo="label+percent",
+        textposition="inside",
+        marker=dict(colors=[
+            "#1976D2", "#FF9800", "#4CAF50", "#F44336", "#9C27B0",
+            "#00BCD4", "#795548", "#607D8B", "#E91E63", "#CDDC39",
+            "#3F51B5", "#FF5722", "#009688", "#FFC107", "#8BC34A",
+        ][:len(labels)]),
+    ))
+    fig.update_layout(
+        title=title,
+        height=380,
+        margin=dict(l=20, r=20, t=50, b=20),
+        showlegend=True,
+    )
+    return fig
+
+
+def chart_rolling_sharpe(
+    rolling_sharpe: "pd.Series",
+    title: str = "Rolling Sharpe Ratio (1Y)",
+) -> go.Figure:
+    """Rolling Sharpe ratio line chart."""
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=rolling_sharpe.index, y=rolling_sharpe.values,
+        mode="lines", name="Rolling Sharpe",
+        line=dict(color=COLORS["primary"], width=1.5),
+    ))
+    # Reference lines
+    fig.add_hline(y=0, line_dash="dash", line_color=COLORS["gray"], opacity=0.6)
+    fig.add_hline(y=1, line_dash="dot", line_color=COLORS["green"], opacity=0.4,
+                  annotation_text="1.0", annotation_position="bottom right")
+    fig.update_layout(
+        title=title,
+        xaxis_title="Date",
+        yaxis_title="Sharpe Ratio",
+        height=320,
+        margin=dict(l=50, r=20, t=50, b=40),
+    )
+    return fig
+
+
+def chart_backtest_trades(
+    trades_log: list,
+    title: str = "리밸런싱 이력",
+) -> go.Figure:
+    """Bar chart showing portfolio value at each rebalance point + transaction costs."""
+    if not trades_log:
+        fig = go.Figure()
+        fig.update_layout(title=title, annotations=[dict(
+            text="매매 이력 없음", xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False, font=dict(size=16),
+        )])
+        return fig
+
+    dates = [t["date"] for t in trades_log]
+    values = [t["portfolio_value"] for t in trades_log]
+    costs = [t["cost"] for t in trades_log]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=dates, y=values,
+        name="포트폴리오 가치",
+        marker_color=COLORS["primary"],
+    ))
+    fig.add_trace(go.Bar(
+        x=dates, y=costs,
+        name="거래 비용",
+        marker_color=COLORS["red"],
+        yaxis="y2",
+    ))
+    fig.update_layout(
+        title=title,
+        xaxis_title="리밸런싱 일자",
+        yaxis=dict(title="포트폴리오 가치 ($)"),
+        yaxis2=dict(title="거래 비용 ($)", overlaying="y", side="right"),
+        barmode="group",
+        height=380,
+        margin=dict(l=60, r=60, t=50, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
