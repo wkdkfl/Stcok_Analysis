@@ -108,6 +108,14 @@ GURU_INVESTORS = {
     "Renaissance Technologies":                  "0001037389",
 }
 
+# ── Screener ─────────────────────────────────────────────────
+SCREENER_UNIVERSES = {
+    "S&P 500": "sp500",
+    "NASDAQ 100": "nasdaq100",
+    "S&P 500 + NASDAQ 100": "sp500_nasdaq100",
+}
+SCREENER_CACHE_TTL = 86400  # 24h
+
 # ── UI ───────────────────────────────────────────────────────
 CACHE_TTL = 3600  # 초단위
 MAX_TICKERS = 10

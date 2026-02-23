@@ -13,7 +13,7 @@ import os
 # ── Path setup ───────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import MAX_TICKERS, DCF_DEFAULTS
+from config import MAX_TICKERS, DCF_DEFAULTS, SCREENER_UNIVERSES, SECTOR_MULTIPLES_FALLBACK
 
 # ── Page Config ──────────────────────────────────────────
 st.set_page_config(
@@ -76,26 +76,80 @@ with st.sidebar:
     st.title("📊 Stock Analyzer")
     st.markdown("---")
 
-    ticker_input = st.text_input(
-        "Ticker(s) — 쉼표로 구분",
-        value="AAPL",
-        placeholder="AAPL, MSFT, NVDA",
-        help="미국 주식 티커를 입력하세요. 복수 입력 시 Compare 탭에서 비교 가능"
-    )
+    # ── 종목 분석 설정 ────────────────────────────────────
+    with st.expander("📊 종목 분석", expanded=True):
+        ticker_input = st.text_input(
+            "Ticker(s) — 쉼표로 구분",
+            value="AAPL",
+            placeholder="AAPL, MSFT, NVDA",
+            help="미국 주식 티커를 입력하세요. 복수 입력 시 Compare 탭에서 비교 가능"
+        )
 
-    st.markdown("### DCF 가정 조정")
-    col1, col2 = st.columns(2)
-    with col1:
-        wacc_override = st.slider("WACC (%)", 4.0, 20.0, 10.0, 0.5) / 100
-    with col2:
-        terminal_g = st.slider("Terminal Growth (%)", 0.0, 5.0, 2.5, 0.5) / 100
+        st.markdown("#### DCF 가정 조정")
+        col1, col2 = st.columns(2)
+        with col1:
+            wacc_override = st.slider("WACC (%)", 4.0, 20.0, 10.0, 0.5) / 100
+        with col2:
+            terminal_g = st.slider("Terminal Growth (%)", 0.0, 5.0, 2.5, 0.5) / 100
 
-    high_growth_yrs = st.slider("High Growth Period (yrs)", 3, 10, 5)
-    growth_override = st.slider("Growth Rate Override (%)", -10.0, 40.0, 0.0, 1.0)
+        high_growth_yrs = st.slider("High Growth Period (yrs)", 3, 10, 5)
+        growth_override = st.slider("Growth Rate Override (%)", -10.0, 40.0, 0.0, 1.0)
 
-    show_macro = st.checkbox("Show Macro Environment", value=True)
+        show_macro = st.checkbox("Show Macro Environment", value=True)
 
-    analyze_btn = st.button("🔍 분석 시작", type="primary", use_container_width=True)
+        analyze_btn = st.button("🔍 분석 시작", type="primary", use_container_width=True)
+
+    # ── 스크리너 설정 ────────────────────────────────────
+    with st.expander("🔎 스크리너 필터", expanded=False):
+        scr_universe = st.selectbox(
+            "유니버스",
+            list(SCREENER_UNIVERSES.keys()),
+            index=2,
+            key="scr_universe",
+        )
+
+        scr_grade = st.multiselect(
+            "Overall Grade",
+            ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-"],
+            default=["A+", "A", "A-", "B+", "B", "B-"],
+            key="scr_grade",
+        )
+
+        scr_cap = st.multiselect(
+            "시가총액",
+            ["Mega (>200B)", "Large (10-200B)", "Mid (2-10B)", "Small (<2B)"],
+            default=["Mega (>200B)", "Large (10-200B)", "Mid (2-10B)", "Small (<2B)"],
+            key="scr_cap",
+        )
+
+        scr_sector = st.multiselect(
+            "섹터",
+            list(SECTOR_MULTIPLES_FALLBACK.keys()),
+            default=[],
+            key="scr_sector",
+            help="비워두면 전체 섹터",
+        )
+
+        scr_country = st.text_input(
+            "국가 (쉼표 구분, 비워두면 전체)",
+            value="",
+            key="scr_country",
+            placeholder="United States, Ireland",
+        )
+
+        st.markdown("#### 추가 필터")
+        scr_pe = st.slider("P/E 범위", 0.0, 100.0, (0.0, 100.0), key="scr_pe")
+        scr_div = st.slider("최소 배당수익률 (%)", 0.0, 10.0, 0.0, 0.5, key="scr_div")
+        scr_roe = st.slider("최소 ROE (%)", 0.0, 50.0, 0.0, 1.0, key="scr_roe")
+
+        scr_sort = st.selectbox(
+            "정렬 기준",
+            ["Overall Grade ↓", "시가총액 ↓", "P/E ↑", "ROE ↓", "배당수익률 ↓"],
+            key="scr_sort",
+        )
+
+        scan_btn = st.button("🔍 스크리닝 시작", type="primary",
+                             use_container_width=True, key="scan_btn")
 
     st.markdown("---")
     st.caption("Data: Yahoo Finance | FRED | SEC EDGAR")
@@ -842,70 +896,320 @@ def display_comparison(all_results: list):
 
 
 # ═══════════════════════════════════════════════════════════
+# SCREENER HELPERS
+# ═══════════════════════════════════════════════════════════
+
+def _apply_screener_filters(stocks: list) -> list:
+    """Apply sidebar filter criteria to screener scan data."""
+    filtered = list(stocks)
+
+    # Grade filter
+    grade_filter = st.session_state.get("scr_grade", [])
+    if grade_filter:
+        filtered = [s for s in filtered
+                    if s.get("grades", {}).get("overall_grade") in grade_filter]
+
+    # Market cap filter
+    cap_filter = st.session_state.get("scr_cap", [])
+    if cap_filter and len(cap_filter) < 4:
+        def _cap_match(mc):
+            if mc is None:
+                return False
+            if "Mega (>200B)" in cap_filter and mc > 200e9:
+                return True
+            if "Large (10-200B)" in cap_filter and 10e9 <= mc <= 200e9:
+                return True
+            if "Mid (2-10B)" in cap_filter and 2e9 <= mc <= 10e9:
+                return True
+            if "Small (<2B)" in cap_filter and mc < 2e9:
+                return True
+            return False
+        filtered = [s for s in filtered if _cap_match(s.get("market_cap"))]
+
+    # Sector filter
+    sector_filter = st.session_state.get("scr_sector", [])
+    if sector_filter:
+        filtered = [s for s in filtered if s.get("sector") in sector_filter]
+
+    # Country filter
+    country_text = st.session_state.get("scr_country", "")
+    if country_text.strip():
+        countries = [c.strip() for c in country_text.split(",") if c.strip()]
+        if countries:
+            filtered = [s for s in filtered if s.get("country") in countries]
+
+    # P/E range
+    pe_range = st.session_state.get("scr_pe", (0.0, 100.0))
+    if pe_range != (0.0, 100.0):
+        def _pe_match(s):
+            pe = s.get("forward_pe") or s.get("trailing_pe")
+            if pe is None:
+                return True  # Include stocks without P/E
+            return pe_range[0] <= pe <= pe_range[1]
+        filtered = [s for s in filtered if _pe_match(s)]
+
+    # Min dividend yield
+    min_div = st.session_state.get("scr_div", 0.0)
+    if min_div > 0:
+        filtered = [s for s in filtered
+                    if (s.get("dividend_yield") or 0) * 100 >= min_div]
+
+    # Min ROE
+    min_roe = st.session_state.get("scr_roe", 0.0)
+    if min_roe > 0:
+        filtered = [s for s in filtered
+                    if s.get("roe") is not None and s["roe"] * 100 >= min_roe]
+
+    # Sort
+    sort_by = st.session_state.get("scr_sort", "Overall Grade ↓")
+    if sort_by == "Overall Grade ↓":
+        filtered.sort(key=lambda x: x.get("grades", {}).get("overall_score", 0), reverse=True)
+    elif sort_by == "시가총액 ↓":
+        filtered.sort(key=lambda x: x.get("market_cap") or 0, reverse=True)
+    elif sort_by == "P/E ↑":
+        filtered.sort(key=lambda x: (x.get("forward_pe") or x.get("trailing_pe") or 999))
+    elif sort_by == "ROE ↓":
+        filtered.sort(key=lambda x: x.get("roe") or 0, reverse=True)
+    elif sort_by == "배당수익률 ↓":
+        filtered.sort(key=lambda x: x.get("dividend_yield") or 0, reverse=True)
+
+    return filtered
+
+
+def display_screener():
+    """Display the stock screener tab."""
+    from src.fetcher.screener_cache import (
+        load_cached_scan, scan_universe as _scan_universe, load_universe
+    )
+
+    universe_key = SCREENER_UNIVERSES.get(scr_universe, "sp500_nasdaq100")
+
+    # ── Load data (session → disk cache) ─────────────────
+    scan_data = None
+    if (st.session_state.get("screener_data")
+            and st.session_state.get("screener_universe") == universe_key):
+        scan_data = st.session_state["screener_data"]
+    else:
+        cached = load_cached_scan(universe_key)
+        if cached:
+            st.session_state["screener_data"] = cached
+            st.session_state["screener_universe"] = universe_key
+            scan_data = cached
+
+    # ── Run scan if button pressed ───────────────────────
+    if scan_btn:
+        st.info(f"🔄 **{scr_universe}** 유니버스 스캔을 시작합니다... (약 5-10분 소요)")
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        scan_data = _scan_universe(universe_key, progress_bar, status_text)
+        st.session_state["screener_data"] = scan_data
+        st.session_state["screener_universe"] = universe_key
+        progress_bar.empty()
+        status_text.empty()
+        st.success(
+            f"✅ 스캔 완료! {scan_data['successful']}/{scan_data['total_scanned']}개 종목 성공"
+        )
+
+    # ── No data yet ──────────────────────────────────────
+    if not scan_data:
+        universe_tickers = load_universe(universe_key)
+        st.info(
+            f"📋 **{scr_universe}** 유니버스: {len(universe_tickers)}개 종목\n\n"
+            f"아직 스캔 데이터가 없습니다. 사이드바의 **🔎 스크리너 필터**에서 "
+            f"**'스크리닝 시작'** 버튼을 클릭하세요.\n\n"
+            f"⏱️ 최초 스캔: 약 5-10분 소요 (이후 24시간 캐시)"
+        )
+        return
+
+    # ── Scan summary header ──────────────────────────────
+    scan_time = scan_data.get("scan_time", "N/A")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("스캔 종목 수", f"{scan_data.get('successful', 0)}")
+    c2.metric("스캔 시간", str(scan_time)[:16])
+    c3.metric("실패", f"{scan_data.get('failed', 0)}")
+
+    st.markdown("---")
+
+    # ── Apply filters ────────────────────────────────────
+    stocks = scan_data.get("stocks", [])
+    filtered = _apply_screener_filters(stocks)
+
+    st.subheader(f"필터 결과: {len(filtered)}개 / {len(stocks)}개 종목")
+
+    if not filtered:
+        st.warning("조건에 맞는 종목이 없습니다. 필터를 조정해보세요.")
+        return
+
+    # ── Build display table ──────────────────────────────
+    rows = []
+    for i, s in enumerate(filtered):
+        g = s.get("grades", {})
+        mc = s.get("market_cap")
+        mc_str = f"${mc/1e9:.1f}B" if mc and mc >= 1e9 else (
+            f"${mc/1e6:.0f}M" if mc else "N/A")
+        pe = s.get("forward_pe") or s.get("trailing_pe")
+        roe = s.get("roe")
+        dy = s.get("dividend_yield")
+
+        rows.append({
+            "#": i + 1,
+            "티커": s["ticker"],
+            "기업명": s.get("name", ""),
+            "섹터": s.get("sector", "N/A"),
+            "국가": s.get("country", "N/A"),
+            "시가총액": mc_str,
+            "현재가": f"${s.get('current_price', 0):,.2f}",
+            "Overall": f"{g.get('overall_grade', '—')} ({g.get('overall_score', 0):.0f})",
+            "Valuation": g.get("valuation_grade", "—"),
+            "Financial": g.get("financial_grade", "—"),
+            "Macro": g.get("macro_grade", "—"),
+            "P/E": f"{pe:.1f}" if pe else "—",
+            "ROE": f"{roe*100:.1f}%" if roe else "—",
+            "배당률": f"{dy*100:.1f}%" if dy else "—",
+        })
+
+    df_screen = pd.DataFrame(rows)
+    st.dataframe(df_screen, use_container_width=True, hide_index=True, height=500)
+
+    # ── Grade legend ─────────────────────────────────────
+    with st.expander("ℹ️ 등급 범례 및 안내"):
+        st.markdown("""
+| 등급 | 점수 범위 | 의미 |
+|------|----------|------|
+| A+ ~ A- | 80-100 | 우수 |
+| B+ ~ B- | 62-79 | 양호 |
+| C+ ~ C- | 42-61 | 보통 |
+| D+ ~ D- | 0-41 | 미흡 |
+
+**스크리너 등급 산출 방식:** Financial(50%) + Valuation(30%) + Macro(20%)
+
+- **Financial:** 매출성장률, 영업이익률, ROE, FCF마진, D/E
+- **Valuation:** P/E, EV/EBITDA, P/B를 섹터 평균과 비교
+- **Macro:** 시장 전체 환경 (기본값 50점)
+
+Quality, Smart Money, Risk&Quant, Sector 등급은 **전체 분석**에서만 확인 가능합니다.
+        """)
+
+    # ── Select tickers for full analysis ─────────────────
+    st.markdown("---")
+    st.subheader("📊 선택 종목 전체 분석")
+    ticker_options = [s["ticker"] for s in filtered]
+    selected_tickers = st.multiselect(
+        "분석할 종목 선택 (최대 10개)",
+        ticker_options,
+        max_selections=10,
+        key="scr_select_tickers",
+    )
+
+    if selected_tickers:
+        if st.button("🔍 선택 종목 전체 분석 실행", type="primary", key="scr_full_analysis"):
+            dcf_overrides = {
+                "risk_free_rate": DCF_DEFAULTS["risk_free_rate"],
+                "equity_risk_premium": DCF_DEFAULTS["equity_risk_premium"],
+                "terminal_growth_rate": terminal_g,
+                "high_growth_years": high_growth_yrs,
+                "fade_years": DCF_DEFAULTS["fade_years"],
+            }
+            if wacc_override != 0.10:
+                dcf_overrides["default_wacc"] = wacc_override
+            if growth_override != 0.0:
+                dcf_overrides["growth_override"] = growth_override / 100
+
+            full_results = []
+            for ticker in selected_tickers:
+                result = run_analysis(ticker, dcf_overrides)
+                if result:
+                    full_results.append(result)
+
+            if full_results:
+                st.session_state["all_results"] = full_results
+                st.success(
+                    f"✅ {len(full_results)}개 종목 분석 완료! "
+                    f"**📊 종목 분석** 탭에서 결과를 확인하세요."
+                )
+            else:
+                st.error("분석에 실패했습니다. 티커를 확인해주세요.")
+
+
+# ═══════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════
 
-# Initialize session state for persisting analysis results across reruns
+# Initialize session state
 if "all_results" not in st.session_state:
     st.session_state["all_results"] = None
+if "screener_data" not in st.session_state:
+    st.session_state["screener_data"] = None
+if "screener_universe" not in st.session_state:
+    st.session_state["screener_universe"] = None
 
-if analyze_btn:
-    tickers = parse_tickers(ticker_input)
-    if not tickers:
-        st.warning("티커를 입력해주세요.")
-        st.stop()
+# ── Main Tabs ────────────────────────────────────────────
+tab_analysis, tab_screener = st.tabs(["📊 종목 분석", "🔎 스크리너"])
 
-    # DCF overrides from sidebar
-    dcf_overrides = {
-        "risk_free_rate": DCF_DEFAULTS["risk_free_rate"],
-        "equity_risk_premium": DCF_DEFAULTS["equity_risk_premium"],
-        "terminal_growth_rate": terminal_g,
-        "high_growth_years": high_growth_yrs,
-        "fade_years": DCF_DEFAULTS["fade_years"],
-    }
-    if wacc_override != 0.10:
-        dcf_overrides["default_wacc"] = wacc_override
-    if growth_override != 0.0:
-        dcf_overrides["growth_override"] = growth_override / 100
+# ──────────── TAB: ANALYSIS ──────────────────────────────
+with tab_analysis:
+    if analyze_btn:
+        tickers = parse_tickers(ticker_input)
+        if tickers:
+            dcf_overrides = {
+                "risk_free_rate": DCF_DEFAULTS["risk_free_rate"],
+                "equity_risk_premium": DCF_DEFAULTS["equity_risk_premium"],
+                "terminal_growth_rate": terminal_g,
+                "high_growth_years": high_growth_yrs,
+                "fade_years": DCF_DEFAULTS["fade_years"],
+            }
+            if wacc_override != 0.10:
+                dcf_overrides["default_wacc"] = wacc_override
+            if growth_override != 0.0:
+                dcf_overrides["growth_override"] = growth_override / 100
 
-    all_results = []
-    for ticker in tickers:
-        result = run_analysis(ticker, dcf_overrides)
-        if result:
-            all_results.append(result)
+            new_results = []
+            for ticker in tickers:
+                result = run_analysis(ticker, dcf_overrides)
+                if result:
+                    new_results.append(result)
 
-    if not all_results:
-        st.error("분석할 수 있는 종목이 없습니다. 티커를 확인해주세요.")
-        st.stop()
+            if new_results:
+                st.session_state["all_results"] = new_results
+            else:
+                st.error("분석할 수 있는 종목이 없습니다. 티커를 확인해주세요.")
+        else:
+            st.warning("티커를 입력해주세요.")
 
-    # Save results into session state so they survive widget-triggered reruns
-    st.session_state["all_results"] = all_results
+    all_results = st.session_state.get("all_results")
 
-# Display results from session state (persists across selectbox changes, etc.)
-all_results = st.session_state.get("all_results")
-
-if all_results:
-    if len(all_results) == 1:
-        display_single_ticker(all_results[0])
+    if all_results:
+        if len(all_results) == 1:
+            display_single_ticker(all_results[0])
+        else:
+            for r in all_results:
+                with st.expander(
+                    f"📊 {r['data']['ticker']} — {r['data']['name']}",
+                    expanded=False,
+                ):
+                    display_single_ticker(r)
+            display_comparison(all_results)
     else:
-        for r in all_results:
-            with st.expander(f"📊 {r['data']['ticker']} — {r['data']['name']}", expanded=False):
-                display_single_ticker(r)
-        display_comparison(all_results)
-else:
-    st.title("📊 Stock Intrinsic Value Analyzer")
-    st.markdown("""
-    **미국 주식의 적정 가치를 분석하는 도구입니다.**
+        st.title("📊 Stock Intrinsic Value Analyzer")
+        st.markdown("""
+        **미국 주식의 적정 가치를 분석하는 도구입니다.**
 
-    왼쪽 사이드바에서 티커를 입력하고 **"분석 시작"** 버튼을 클릭하세요.
+        왼쪽 사이드바에서 **📊 종목 분석**을 펼치고 티커를 입력 후
+        **"분석 시작"** 버튼을 클릭하세요.
 
-    **분석 항목:**
-    - 7개 밸류에이션 모델 (DCF, Reverse DCF, Residual Income, EPV, DDM, Multiples, Graham)
-    - 품질 점수 (Piotroski F-Score, Altman Z-Score, Beneish M-Score, DuPont)
-    - 스마트머니 시그널 (내부자 거래, 기관 보유, 공매도)
-    - 퀀트/기술 분석 (모멘텀, RSI, 볼린저밴드, 이동평균)
-    - 매크로 환경 (수익률곡선, VIX, 신용 스프레드)
-    - 리스크 지표 (Sharpe, Sortino, VaR, Max Drawdown)
-    - 섹터별 전문 지표
-    """)
-    st.stop()
+        **분석 항목:**
+        - 7개 밸류에이션 모델 (DCF, Reverse DCF, Residual Income, EPV, DDM, Multiples, Graham)
+        - 품질 점수 (Piotroski F-Score, Altman Z-Score, Beneish M-Score, DuPont)
+        - 스마트머니 시그널 (내부자 거래, 기관 보유, 공매도)
+        - 퀀트/기술 분석 (모멘텀, RSI, 볼린저밴드, 이동평균)
+        - 매크로 환경 (수익률곡선, VIX, 신용 스프레드)
+        - 리스크 지표 (Sharpe, Sortino, VaR, Max Drawdown)
+        - 섹터별 전문 지표
+
+        **🔎 스크리너:** 두 번째 탭에서 S&P 500 / NASDAQ 100 종목을 필터링하여
+        등급 기반으로 유망 종목을 찾을 수 있습니다.
+        """)
+
+# ──────────── TAB: SCREENER ──────────────────────────────
+with tab_screener:
+    display_screener()

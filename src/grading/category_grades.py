@@ -259,7 +259,7 @@ def grade_financial(data: Dict[str, Any]) -> float:
 
     # FCF Margin (20 pts)
     fcf = _safe(data.get("fcf"))
-    rev = _safe(data.get("total_revenue"))
+    rev = _safe(data.get("revenue")) or _safe(data.get("total_revenue"))
     if fcf is not None and rev and rev > 0:
         fm = (fcf / rev) * 100
         if fm >= 20:

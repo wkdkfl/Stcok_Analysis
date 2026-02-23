@@ -1,0 +1,608 @@
+[
+  {
+    "ticker": "ADBE",
+    "name": "Adobe Inc.",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "AMD",
+    "name": "Advanced Micro Devices",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ABNB",
+    "name": "Airbnb",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ALNY",
+    "name": "Alnylam Pharmaceuticals",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "GOOGL",
+    "name": "Alphabet Inc. (Class A)",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "GOOG",
+    "name": "Alphabet Inc. (Class C)",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "AMZN",
+    "name": "Amazon",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "AEP",
+    "name": "American Electric Power",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "AMGN",
+    "name": "Amgen",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ADI",
+    "name": "Analog Devices",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "AAPL",
+    "name": "Apple Inc.",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "AMAT",
+    "name": "Applied Materials",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "APP",
+    "name": "AppLovin",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ARM",
+    "name": "Arm Holdings",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ASML",
+    "name": "ASML Holding",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "TEAM",
+    "name": "Atlassian",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ADSK",
+    "name": "Autodesk",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ADP",
+    "name": "Automatic Data Processing",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "AXON",
+    "name": "Axon Enterprise",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "BKR",
+    "name": "Baker Hughes",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "BKNG",
+    "name": "Booking Holdings",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "AVGO",
+    "name": "Broadcom",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CDNS",
+    "name": "Cadence Design Systems",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CHTR",
+    "name": "Charter Communications",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CTAS",
+    "name": "Cintas",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CSCO",
+    "name": "Cisco",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CCEP",
+    "name": "Coca-Cola Europacific Partners",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CTSH",
+    "name": "Cognizant",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CMCSA",
+    "name": "Comcast",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CEG",
+    "name": "Constellation Energy",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CPRT",
+    "name": "Copart",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CSGP",
+    "name": "CoStar Group",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "COST",
+    "name": "Costco",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CRWD",
+    "name": "CrowdStrike",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "CSX",
+    "name": "CSX Corporation",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "DDOG",
+    "name": "Datadog",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "DXCM",
+    "name": "DexCom",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "FANG",
+    "name": "Diamondback Energy",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "DASH",
+    "name": "DoorDash",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "EA",
+    "name": "Electronic Arts",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "EXC",
+    "name": "Exelon",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "FAST",
+    "name": "Fastenal",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "FER",
+    "name": "Ferrovial",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "FTNT",
+    "name": "Fortinet",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "GEHC",
+    "name": "GE HealthCare",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "GILD",
+    "name": "Gilead Sciences",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "HON",
+    "name": "Honeywell",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "IDXX",
+    "name": "Idexx Laboratories",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "INSM",
+    "name": "Insmed Incorporated",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "INTC",
+    "name": "Intel",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "INTU",
+    "name": "Intuit",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ISRG",
+    "name": "Intuitive Surgical",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "KDP",
+    "name": "Keurig Dr Pepper",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "KLAC",
+    "name": "KLA Corporation",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "KHC",
+    "name": "Kraft Heinz",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "LRCX",
+    "name": "Lam Research",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "LIN",
+    "name": "Linde plc",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "MAR",
+    "name": "Marriott International",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "MRVL",
+    "name": "Marvell Technology",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "MELI",
+    "name": "Mercado Libre",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "META",
+    "name": "Meta Platforms",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "MCHP",
+    "name": "Microchip Technology",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "MU",
+    "name": "Micron Technology",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "MSFT",
+    "name": "Microsoft",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "MSTR",
+    "name": "MicroStrategy",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "MDLZ",
+    "name": "Mondelez International",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "MPWR",
+    "name": "Monolithic Power Systems",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "MNST",
+    "name": "Monster Beverage",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "NFLX",
+    "name": "Netflix, Inc.",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "NVDA",
+    "name": "Nvidia",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "NXPI",
+    "name": "NXP Semiconductors",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ORLY",
+    "name": "O'Reilly Automotive",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ODFL",
+    "name": "Old Dominion Freight Line",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "PCAR",
+    "name": "Paccar",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "PLTR",
+    "name": "Palantir Technologies",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "PANW",
+    "name": "Palo Alto Networks",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "PAYX",
+    "name": "Paychex",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "PYPL",
+    "name": "PayPal",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "PDD",
+    "name": "PDD Holdings",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "PEP",
+    "name": "PepsiCo",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "QCOM",
+    "name": "Qualcomm",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "REGN",
+    "name": "Regeneron Pharmaceuticals",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ROP",
+    "name": "Roper Technologies",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ROST",
+    "name": "Ross Stores",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "STX",
+    "name": "Seagate Technology",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "SHOP",
+    "name": "Shopify",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "SBUX",
+    "name": "Starbucks",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "SNPS",
+    "name": "Synopsys",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "TMUS",
+    "name": "T-Mobile US",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "TTWO",
+    "name": "Take-Two Interactive",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "TSLA",
+    "name": "Tesla, Inc.",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "TXN",
+    "name": "Texas Instruments",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "TRI",
+    "name": "Thomson Reuters",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "VRSK",
+    "name": "Verisk Analytics",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "VRTX",
+    "name": "Vertex Pharmaceuticals",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "WMT",
+    "name": "Walmart",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "WBD",
+    "name": "Warner Bros. Discovery",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "WDC",
+    "name": "Western Digital",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "WDAY",
+    "name": "Workday, Inc.",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "XEL",
+    "name": "Xcel Energy",
+    "sector": "",
+    "industry": ""
+  },
+  {
+    "ticker": "ZS",
+    "name": "Zscaler",
+    "sector": "",
+    "industry": ""
+  }
+]
