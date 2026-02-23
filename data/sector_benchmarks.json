@@ -1,0 +1,123 @@
+{
+    "Technology": {
+        "ev_ebitda": 20.0,
+        "pe": 28.0,
+        "ps": 6.0,
+        "pfcf": 30.0,
+        "pb": 6.0,
+        "gross_margin": 60.0,
+        "operating_margin": 25.0,
+        "roe": 25.0,
+        "revenue_growth": 12.0
+    },
+    "Communication Services": {
+        "ev_ebitda": 12.0,
+        "pe": 20.0,
+        "ps": 3.5,
+        "pfcf": 20.0,
+        "pb": 3.0,
+        "gross_margin": 55.0,
+        "operating_margin": 20.0,
+        "roe": 18.0,
+        "revenue_growth": 8.0
+    },
+    "Consumer Cyclical": {
+        "ev_ebitda": 14.0,
+        "pe": 22.0,
+        "ps": 1.5,
+        "pfcf": 20.0,
+        "pb": 4.0,
+        "gross_margin": 35.0,
+        "operating_margin": 10.0,
+        "roe": 20.0,
+        "revenue_growth": 8.0
+    },
+    "Consumer Defensive": {
+        "ev_ebitda": 14.0,
+        "pe": 22.0,
+        "ps": 2.0,
+        "pfcf": 22.0,
+        "pb": 4.0,
+        "gross_margin": 40.0,
+        "operating_margin": 15.0,
+        "roe": 25.0,
+        "revenue_growth": 5.0
+    },
+    "Healthcare": {
+        "ev_ebitda": 16.0,
+        "pe": 24.0,
+        "ps": 4.0,
+        "pfcf": 25.0,
+        "pb": 4.0,
+        "gross_margin": 55.0,
+        "operating_margin": 18.0,
+        "roe": 18.0,
+        "revenue_growth": 10.0
+    },
+    "Financial Services": {
+        "ev_ebitda": 10.0,
+        "pe": 13.0,
+        "ps": 3.0,
+        "pfcf": 12.0,
+        "pb": 1.5,
+        "gross_margin": 50.0,
+        "operating_margin": 30.0,
+        "roe": 12.0,
+        "revenue_growth": 6.0
+    },
+    "Industrials": {
+        "ev_ebitda": 14.0,
+        "pe": 22.0,
+        "ps": 2.0,
+        "pfcf": 22.0,
+        "pb": 4.0,
+        "gross_margin": 30.0,
+        "operating_margin": 12.0,
+        "roe": 18.0,
+        "revenue_growth": 7.0
+    },
+    "Energy": {
+        "ev_ebitda": 6.0,
+        "pe": 10.0,
+        "ps": 1.2,
+        "pfcf": 8.0,
+        "pb": 1.5,
+        "gross_margin": 40.0,
+        "operating_margin": 15.0,
+        "roe": 15.0,
+        "revenue_growth": 5.0
+    },
+    "Basic Materials": {
+        "ev_ebitda": 8.0,
+        "pe": 14.0,
+        "ps": 1.5,
+        "pfcf": 12.0,
+        "pb": 2.0,
+        "gross_margin": 30.0,
+        "operating_margin": 12.0,
+        "roe": 14.0,
+        "revenue_growth": 5.0
+    },
+    "Real Estate": {
+        "ev_ebitda": 18.0,
+        "pe": 35.0,
+        "ps": 6.0,
+        "pfcf": 22.0,
+        "pb": 2.0,
+        "gross_margin": 55.0,
+        "operating_margin": 25.0,
+        "roe": 8.0,
+        "revenue_growth": 5.0
+    },
+    "Utilities": {
+        "ev_ebitda": 12.0,
+        "pe": 18.0,
+        "ps": 2.5,
+        "pfcf": 18.0,
+        "pb": 1.8,
+        "gross_margin": 45.0,
+        "operating_margin": 20.0,
+        "roe": 10.0,
+        "revenue_growth": 4.0
+    }
+}
