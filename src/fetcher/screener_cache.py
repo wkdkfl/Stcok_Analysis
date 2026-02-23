@@ -280,8 +280,11 @@ def fetch_light_info(ticker: str) -> Optional[Dict[str, Any]]:
 
 
 def _fetch_light_info_raw(ticker: str) -> Optional[Dict[str, Any]]:
-    """Raw fetch without cache."""
-    try:
+    """Raw fetch without cache. Auto-retries on transient network errors."""
+    from src.fetcher.retry import with_retry
+
+    @with_retry(max_retries=2, backoff=0.5)
+    def _inner():
         from src.fetcher.ssl_session import get_session
         t = yf.Ticker(ticker, session=get_session())
         info = t.info or {}
@@ -330,6 +333,9 @@ def _fetch_light_info_raw(ticker: str) -> Optional[Dict[str, Any]]:
             "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
             "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
         }
+
+    try:
+        return _inner()
     except Exception:
         return None
 
@@ -373,9 +379,11 @@ def save_cached_scan(universe_name: str, scan_data: Dict[str, Any]):
 def scan_universe(universe_name: str, progress_bar=None, status_text=None) -> Dict[str, Any]:
     """
     Scan all tickers in a universe with lightweight data fetch + screener grades.
+    Uses ThreadPoolExecutor for 5-10x speedup over sequential scanning.
     Shows progress via optional Streamlit widgets.
     """
     from src.grading.screener_grades import compute_screener_grades
+    from src.fetcher.parallel import batch_fetch
 
     tickers = load_universe(universe_name)
     total = len(tickers)
@@ -391,45 +399,57 @@ def scan_universe(universe_name: str, progress_bar=None, status_text=None) -> Di
         }
 
     results = []
-    failed = []
+    failed_list = []
     start_time = time.time()
 
-    for i, t_info in enumerate(tickers):
-        ticker = t_info["ticker"]
+    # Build ticker → name map
+    ticker_list = [t["ticker"] for t in tickers]
 
+    def _fetch_and_grade(ticker: str):
+        stock_info = fetch_light_info(ticker)
+        if stock_info:
+            grades = compute_screener_grades(stock_info)
+            stock_info["grades"] = grades
+            return stock_info
+        return None
+
+    # Progress tracking (thread-safe via list append)
+    _done = [0]  # mutable counter in list
+
+    def _on_progress(done, tot, item, success):
+        _done[0] = done
         if progress_bar:
-            progress_bar.progress((i + 1) / total)
+            progress_bar.progress(done / tot)
         if status_text:
             elapsed = time.time() - start_time
-            rate = (i + 1) / elapsed if elapsed > 0 else 1
-            remaining = (total - i - 1) / rate if rate > 0 else 0
+            rate = done / elapsed if elapsed > 0 else 1
+            remaining = (tot - done) / rate if rate > 0 else 0
+            ok = done - len(failed_list)
             status_text.text(
-                f"스캔 중: {ticker} ({i+1}/{total}) | "
-                f"성공: {len(results)} | 실패: {len(failed)} | "
+                f"스캔 중: {item} ({done}/{tot}) | "
+                f"성공: {ok} | 실패: {len(failed_list)} | "
                 f"남은 시간: ~{remaining/60:.1f}분"
             )
 
-        try:
-            stock_info = fetch_light_info(ticker)
-            if stock_info:
-                grades = compute_screener_grades(stock_info)
-                stock_info["grades"] = grades
-                results.append(stock_info)
-            else:
-                failed.append(ticker)
-        except Exception:
-            failed.append(ticker)
+    # Parallel fetch: 20 workers, 0.05s inter-worker delay
+    fetched, fetch_failed = batch_fetch(
+        fn=_fetch_and_grade,
+        items=ticker_list,
+        max_workers=20,
+        delay=0.05,
+        on_progress=_on_progress,
+    )
 
-        # Throttle to avoid rate limiting
-        time.sleep(0.15)
+    results = [v for v in fetched.values() if v is not None]
+    failed_list = fetch_failed
 
     scan_data = {
         "universe": universe_name,
         "scan_time": datetime.now().isoformat(),
         "total_scanned": total,
         "successful": len(results),
-        "failed": len(failed),
-        "failed_tickers": failed[:50],
+        "failed": len(failed_list),
+        "failed_tickers": failed_list[:50],
         "stocks": results,
     }
 

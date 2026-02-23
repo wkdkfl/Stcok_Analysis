@@ -19,6 +19,7 @@ from config import (
     WEIGHT_SCHEME_NAMES, REBALANCE_FREQ_MAP,
     OPENAI_API_KEY, ANTHROPIC_API_KEY, AI_REPORT_DEFAULTS,
 )
+from src.i18n import t, get_language
 
 # ── Page Config ──────────────────────────────────────────
 st.set_page_config(
@@ -70,6 +71,55 @@ st.markdown("""
         margin: 0;
     }
     div[data-testid="stMetricValue"] { font-size: 20px; }
+
+    /* ── Mobile Responsive ─────────────────────────── */
+    @media (max-width: 768px) {
+        .metric-card {
+            padding: 10px 12px;
+        }
+        .metric-card h3 { font-size: 11px; }
+        .metric-card h1 { font-size: 18px; }
+        .signal-box {
+            padding: 10px;
+            font-size: 16px;
+        }
+        .grade-card {
+            padding: 8px 4px;
+            margin: 2px 0;
+        }
+        .grade-card .grade-label { font-size: 9px; }
+        .grade-card .grade-value { font-size: 16px; }
+        .grade-card .grade-score { font-size: 8px; }
+        div[data-testid="stMetricValue"] { font-size: 16px; }
+        /* Auto-wrap Streamlit columns on mobile */
+        div[data-testid="column"] {
+            min-width: 140px !important;
+            flex: 1 1 45% !important;
+        }
+        /* Reduce main padding */
+        .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+        }
+        /* Smaller tab text */
+        button[data-baseweb="tab"] {
+            font-size: 12px !important;
+            padding: 6px 8px !important;
+        }
+    }
+
+    @media (max-width: 480px) {
+        div[data-testid="column"] {
+            min-width: 100% !important;
+            flex: 1 1 100% !important;
+        }
+        .metric-card h1 { font-size: 16px; }
+        .grade-card .grade-value { font-size: 14px; }
+        button[data-baseweb="tab"] {
+            font-size: 10px !important;
+            padding: 4px 6px !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -78,19 +128,36 @@ st.markdown("""
 # SIDEBAR
 # ═══════════════════════════════════════════════════════════
 with st.sidebar:
-    st.title("📊 Stock Analyzer")
+    st.title(t("sidebar.title"))
+
+    # ── Language toggle ──────────────────────────────────
+    _lang_options = ["한국어", "English"]
+    _lang_map = {"한국어": "ko", "English": "en"}
+    if "language" not in st.session_state:
+        st.session_state["language"] = "ko"
+    _cur_lang_label = "한국어" if st.session_state["language"] == "ko" else "English"
+    _sel_lang = st.selectbox(
+        "🌐 Language",
+        _lang_options,
+        index=_lang_options.index(_cur_lang_label),
+        key="_lang_select",
+    )
+    if _lang_map[_sel_lang] != st.session_state["language"]:
+        st.session_state["language"] = _lang_map[_sel_lang]
+        st.rerun()
+
     st.markdown("---")
 
     # ── 종목 분석 설정 ────────────────────────────────────
-    with st.expander("📊 종목 분석", expanded=True):
+    with st.expander(t("sidebar.analysis"), expanded=True):
         ticker_input = st.text_input(
-            "Ticker(s) — 쉼표로 구분",
+            t("sidebar.ticker_label"),
             value="AAPL",
             placeholder="AAPL, MSFT, NVDA",
-            help="미국 주식 티커를 입력하세요. 복수 입력 시 Compare 탭에서 비교 가능"
+            help=t("sidebar.ticker_help")
         )
 
-        st.markdown("#### DCF 가정 조정")
+        st.markdown(t("sidebar.dcf_title"))
         col1, col2 = st.columns(2)
         with col1:
             wacc_override = st.slider("WACC (%)", 4.0, 20.0, 10.0, 0.5) / 100
@@ -100,14 +167,14 @@ with st.sidebar:
         high_growth_yrs = st.slider("High Growth Period (yrs)", 3, 10, 5)
         growth_override = st.slider("Growth Rate Override (%)", -10.0, 40.0, 0.0, 1.0)
 
-        show_macro = st.checkbox("Show Macro Environment", value=True)
+        show_macro = st.checkbox(t("sidebar.show_macro"), value=True)
 
-        analyze_btn = st.button("🔍 분석 시작", type="primary", use_container_width=True)
+        analyze_btn = st.button(t("sidebar.analyze_btn"), type="primary", use_container_width=True)
 
     # ── 스크리너 설정 ────────────────────────────────────
-    with st.expander("🔎 스크리너 필터", expanded=False):
+    with st.expander(t("sidebar.screener"), expanded=False):
         scr_universe = st.selectbox(
-            "유니버스",
+            t("sidebar.universe"),
             list(SCREENER_UNIVERSES.keys()),
             index=2,
             key="scr_universe",
@@ -121,61 +188,56 @@ with st.sidebar:
         )
 
         scr_cap = st.multiselect(
-            "시가총액",
+            t("sidebar.cap"),
             ["Mega (>200B)", "Large (10-200B)", "Mid (2-10B)", "Small (<2B)"],
             default=["Mega (>200B)", "Large (10-200B)", "Mid (2-10B)", "Small (<2B)"],
             key="scr_cap",
         )
 
         scr_sector = st.multiselect(
-            "섹터",
+            t("sidebar.sector"),
             list(SECTOR_MULTIPLES_FALLBACK.keys()),
             default=[],
             key="scr_sector",
-            help="비워두면 전체 섹터",
+            help=t("sidebar.sector_help"),
         )
 
         scr_country = st.text_input(
-            "국가 (쉼표 구분, 비워두면 전체)",
+            t("sidebar.country"),
             value="",
             key="scr_country",
             placeholder="United States, Ireland",
         )
 
-        st.markdown("#### 추가 필터")
-        scr_pe = st.slider("P/E 범위", 0.0, 100.0, (0.0, 100.0), key="scr_pe")
-        scr_div = st.slider("최소 배당수익률 (%)", 0.0, 10.0, 0.0, 0.5, key="scr_div")
-        scr_roe = st.slider("최소 ROE (%)", 0.0, 50.0, 0.0, 1.0, key="scr_roe")
+        st.markdown(t("sidebar.extra_filters"))
+        scr_pe = st.slider(t("sidebar.pe_range"), 0.0, 100.0, (0.0, 100.0), key="scr_pe")
+        scr_div = st.slider(t("sidebar.min_div"), 0.0, 10.0, 0.0, 0.5, key="scr_div")
+        scr_roe = st.slider(t("sidebar.min_roe"), 0.0, 50.0, 0.0, 1.0, key="scr_roe")
 
         scr_sort = st.selectbox(
-            "정렬 기준",
-            ["Overall Grade ↓", "시가총액 ↓", "P/E ↑", "ROE ↓", "배당수익률 ↓"],
+            t("sidebar.sort_by"),
+            [t("sort.grade"), t("sort.cap"), t("sort.pe"), t("sort.roe"), t("sort.div")],
             key="scr_sort",
         )
 
-        scan_btn = st.button("🔍 스크리닝 시작", type="primary",
+        scan_btn = st.button(t("sidebar.scan_btn"), type="primary",
                              use_container_width=True, key="scan_btn")
 
     # ── 13F 구루 ────────────────────────────────────────
-    with st.expander("🏦 13F 구루", expanded=False):
-        st.caption("SEC 13F 공시 기반 유명 투자자 포트폴리오 조회")
-        st.markdown(
-            "상단의 **🏦 13F 구루** 탭에서\n"
-            "버핏, 달리오 등 15명의 구루 투자자\n"
-            "포트폴리오와 보유 종목을 확인하세요."
-        )
+    with st.expander(t("sidebar.guru"), expanded=False):
+        st.caption(t("sidebar.guru_desc"))
 
     # ── 포트폴리오 시뮬레이터 ────────────────────────────
-    with st.expander("💼 포트폴리오", expanded=False):
+    with st.expander(t("sidebar.portfolio"), expanded=False):
         pf_ticker_input = st.text_input(
-            "종목 (쉼표 구분, 최대 30)",
+            t("sidebar.pf_tickers"),
             value="AAPL, MSFT, GOOG, AMZN, NVDA",
             placeholder="AAPL, MSFT, GOOG",
             key="pf_ticker_input",
-            help="포트폴리오에 포함할 미국 주식 티커",
+            help=t("sidebar.pf_tickers_help"),
         )
         pf_weight_scheme = st.selectbox(
-            "가중치 방식",
+            t("sidebar.weight_scheme"),
             list(WEIGHT_SCHEME_NAMES.keys()),
             index=0,
             key="pf_weight_scheme",
@@ -183,82 +245,82 @@ with st.sidebar:
         pf_col1, pf_col2 = st.columns(2)
         with pf_col1:
             pf_start = st.date_input(
-                "시작일", value=pd.Timestamp.now() - pd.DateOffset(years=3),
+                t("sidebar.start_date"), value=pd.Timestamp.now() - pd.DateOffset(years=3),
                 key="pf_start",
             )
         with pf_col2:
             pf_end = st.date_input(
-                "종료일", value=pd.Timestamp.now(),
+                t("sidebar.end_date"), value=pd.Timestamp.now(),
                 key="pf_end",
             )
         pf_benchmarks = st.multiselect(
-            "벤치마크",
+            t("sidebar.benchmark"),
             list(BENCHMARKS.keys()),
             default=["S&P 500 (SPY)"],
             key="pf_benchmarks",
         )
         pf_capital = st.number_input(
-            "초기 자본 ($)", value=100_000, min_value=1_000,
+            t("sidebar.capital"), value=100_000, min_value=1_000,
             step=10_000, key="pf_capital",
         )
         simulate_btn = st.button(
-            "💼 시뮬레이션 실행", type="primary",
+            t("sidebar.simulate_btn"), type="primary",
             use_container_width=True, key="simulate_btn",
         )
 
     # ── 백테스트 ────────────────────────────────────────
-    with st.expander("📈 백테스트", expanded=False):
+    with st.expander(t("sidebar.backtest"), expanded=False):
         bt_strategy = st.selectbox(
-            "전략",
+            t("sidebar.strategy"),
             list(STRATEGY_NAMES.keys()),
             index=0,
             key="bt_strategy",
         )
         bt_ticker_input = st.text_input(
-            "유니버스 종목 (쉼표 구분)",
+            t("sidebar.bt_tickers"),
             value="AAPL, MSFT, GOOG, AMZN, NVDA, META, TSLA, JPM, V, JNJ",
             key="bt_ticker_input",
-            help="백테스트에 사용할 종목 풀 (최대 30개)",
+            help=t("sidebar.bt_tickers_help"),
         )
         bt_col1, bt_col2 = st.columns(2)
         with bt_col1:
             bt_start = st.date_input(
-                "시작일", value=pd.Timestamp.now() - pd.DateOffset(years=5),
+                t("sidebar.start_date"), value=pd.Timestamp.now() - pd.DateOffset(years=5),
                 key="bt_start",
             )
         with bt_col2:
             bt_end = st.date_input(
-                "종료일", value=pd.Timestamp.now(),
+                t("sidebar.end_date"), value=pd.Timestamp.now(),
                 key="bt_end",
             )
         bt_rebal = st.selectbox(
-            "리밸런싱 주기",
+            t("sidebar.rebal_freq"),
             list(REBALANCE_FREQ_MAP.keys()),
             index=0,
             key="bt_rebal",
         )
         bt_benchmark = st.selectbox(
-            "벤치마크",
+            t("sidebar.benchmark"),
             list(BENCHMARKS.keys()),
             index=0,
             key="bt_benchmark",
         )
         bt_col3, bt_col4 = st.columns(2)
         with bt_col3:
-            bt_top_n = st.slider("Top N (모멘텀/등급)", 3, 20, 10, key="bt_top_n")
+            bt_top_n = st.slider(t("sidebar.top_n"), 3, 20, 10, key="bt_top_n")
         with bt_col4:
-            bt_cost = st.slider("거래비용 (%)", 0.0, 1.0, 0.1, 0.05, key="bt_cost")
+            bt_cost = st.slider(t("sidebar.tx_cost"), 0.0, 1.0, 0.1, 0.05, key="bt_cost")
         bt_capital = st.number_input(
-            "초기 자본 ($)", value=100_000, min_value=1_000,
+            t("sidebar.capital"), value=100_000, min_value=1_000,
             step=10_000, key="bt_capital",
         )
         backtest_btn = st.button(
-            "📈 백테스트 실행", type="primary",
+            t("sidebar.backtest_btn"), type="primary",
             use_container_width=True, key="backtest_btn",
         )
 
     # ── AI 리포트 ────────────────────────────────────
-    with st.expander("🤖 AI 리포트", expanded=False):
+    with st.expander(t("sidebar.ai_report"), expanded=False):
         from src.report.generator import PROVIDER_LIST, PROVIDER_MODELS
 
         ai_provider = st.selectbox(
@@ -302,7 +364,7 @@ with st.sidebar:
         )
 
     st.markdown("---")
-    st.caption("Data: Yahoo Finance | FRED | SEC EDGAR")
+    st.caption(t("sidebar.data_source"))
     st.caption("Models: DCF, Reverse DCF, Residual Income, EPV, DDM, Multiples, Graham")
 
 
@@ -317,9 +379,14 @@ def parse_tickers(text: str) -> list:
 
 
 def run_analysis(ticker: str, dcf_overrides: dict):
-    """Run all analyses for a single ticker."""
+    """
+    Run all analyses for a single ticker.
+    Steps 2-6 run concurrently via ThreadPool. Each section is error-isolated
+    so partial failures don't crash the entire analysis.
+    """
     from src.fetcher.yahoo import fetch_stock_data
     from src.fetcher.fred import fetch_macro_data
+    from src.fetcher.parallel import parallel_run
     from src.valuation.aggregator import run_all_valuations
     from src.quality.piotroski import compute_piotroski
     from src.quality.altman import compute_altman_z
@@ -334,64 +401,100 @@ def run_analysis(ticker: str, dcf_overrides: dict):
     from src.sector.detector import detect_and_compute_sector_metrics
     from src.macro.regime import compute_macro_regime
 
-    # Fetch data
-    with st.spinner(f"📡 {ticker} 데이터 수집 중..."):
+    # ── Step 1: Fetch data (sequential — all others depend on it) ──
+    with st.spinner(t("spinner.fetching", ticker=ticker)):
         stock_data = fetch_stock_data(ticker)
 
     if not stock_data.get("current_price"):
-        st.error(f"❌ {ticker}: 데이터를 가져올 수 없습니다. 티커를 확인해주세요.")
+        st.error(t("err.no_data", ticker=ticker))
         return None
 
-    results = {"data": stock_data}
+    results = {"data": stock_data, "_errors": []}
 
-    # Valuation
-    with st.spinner("📈 밸류에이션 모델 실행 중..."):
-        results["valuation"] = run_all_valuations(stock_data, dcf_overrides)
+    # ── Steps 2-6: Run concurrently ──────────────────────
+    with st.spinner(t("spinner.analyzing", ticker=ticker)):
+        # Define independent tasks
+        tasks = {
+            "valuation": lambda: run_all_valuations(stock_data, dcf_overrides),
+            "piotroski": lambda: compute_piotroski(stock_data),
+            "altman": lambda: compute_altman_z(stock_data),
+            "beneish": lambda: compute_beneish(stock_data),
+            "dupont": lambda: compute_dupont(stock_data),
+            "earnings_quality": lambda: compute_earnings_quality(stock_data),
+            "eva": lambda: compute_eva(stock_data),
+            "quant": lambda: compute_quant_signals(stock_data),
+            "risk": lambda: compute_risk_metrics(stock_data),
+            "sector_metrics": lambda: detect_and_compute_sector_metrics(stock_data),
+        }
 
-    # Quality
-    with st.spinner("🔍 품질 분석 중..."):
-        results["piotroski"] = compute_piotroski(stock_data)
-        results["altman"] = compute_altman_z(stock_data)
-        results["beneish"] = compute_beneish(stock_data)
-        results["dupont"] = compute_dupont(stock_data)
-        eq = compute_earnings_quality(stock_data)
-        results["earnings_quality"] = eq
-        eva = compute_eva(stock_data)
-        results["eva"] = eva
-        results["quality_grade"] = compute_quality_grade(
-            results["piotroski"], results["altman"],
-            results["beneish"], eq, eva
-        )
+        # Guru fetch (SEC 13F)
+        def _fetch_guru():
+            try:
+                from src.fetcher.sec_edgar import fetch_guru_holdings_for_ticker
+                return fetch_guru_holdings_for_ticker(ticker)
+            except Exception:
+                return {"guru_holders": [], "guru_count": 0, "total_guru_value": 0}
+        tasks["guru"] = _fetch_guru
 
-    # Smart Money / Quant / Risk
-    with st.spinner("🧠 스마트머니 & 퀀트 분석 중..."):
-        # Guru investor holdings (SEC 13F)
-        guru_data = None
-        try:
-            from src.fetcher.sec_edgar import fetch_guru_holdings_for_ticker
-            guru_data = fetch_guru_holdings_for_ticker(ticker)
-        except Exception:
-            guru_data = {"guru_holders": [], "guru_count": 0, "total_guru_value": 0}
-        results["guru"] = guru_data
+        # Macro (optional)
+        if show_macro:
+            def _fetch_macro():
+                macro = fetch_macro_data()
+                return compute_macro_regime(macro, stock_data)
+            tasks["macro"] = _fetch_macro
+
+        # Execute all tasks in parallel
+        task_results = parallel_run(tasks, max_workers=8)
+
+    # ── Collect results with error tracking ──────────────
+    for key, val in task_results.items():
+        if isinstance(val, dict) and "_error" in val:
+            results["_errors"].append({"section": key, "error": val["_error"]})
+            results[key] = None
+        else:
+            results[key] = val
+
+    # Smart money depends on guru result
+    guru_data = results.get("guru") or {"guru_holders": [], "guru_count": 0, "total_guru_value": 0}
+    results["guru"] = guru_data
+    try:
         results["smart_money"] = compute_smart_money(stock_data, guru_data)
-        results["quant"] = compute_quant_signals(stock_data)
-        results["risk"] = compute_risk_metrics(stock_data)
+    except Exception as e:
+        results["_errors"].append({"section": "smart_money", "error": str(e)})
+        results["smart_money"] = None
 
-    # Sector
-    results["sector_metrics"] = detect_and_compute_sector_metrics(stock_data)
+    # Quality grade depends on sub-results
+    try:
+        results["quality_grade"] = compute_quality_grade(
+            results.get("piotroski"), results.get("altman"),
+            results.get("beneish"), results.get("earnings_quality"),
+            results.get("eva"),
+        )
+    except Exception as e:
+        results["_errors"].append({"section": "quality_grade", "error": str(e)})
+        results["quality_grade"] = None
 
-    # Macro
-    if show_macro:
-        with st.spinner("🌍 매크로 환경 분석 중..."):
-            macro = fetch_macro_data()
-            results["macro"] = compute_macro_regime(macro, stock_data)
-    else:
+    if not show_macro:
         results["macro"] = None
 
-    # Category Grades & Overall Verdict
-    with st.spinner("📊 종합 등급 산출 중..."):
-        from src.grading.category_grades import compute_all_grades
-        results["grades"] = compute_all_grades(results)
+    # ── Step 7: Grades (needs all results) ───────────────
+    with st.spinner(t("spinner.grades")):
+        try:
+            from src.grading.category_grades import compute_all_grades
+            results["grades"] = compute_all_grades(results)
+        except Exception as e:
+            results["_errors"].append({"section": "grades", "error": str(e)})
+            results["grades"] = {
+                "overall_grade": "N/A", "overall_score": 0,
+                "signal": "데이터 부족", "signal_color": "gray",
+                "categories": {},
+            }
+
+    # Show error summary if any sections failed
+    errors = results.get("_errors", [])
+    if errors:
+        failed_names = ", ".join(e["section"] for e in errors)
+        st.warning(t("err.partial_fail", sections=failed_names))
 
     return results
 
@@ -424,6 +527,7 @@ def display_single_ticker(results: dict):
     upside = valuation.get("upside_pct")
     fv_range = valuation.get("fair_value_range")
 
+    from src.tooltips import tip
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.markdown(
@@ -432,7 +536,8 @@ def display_single_ticker(results: dict):
             unsafe_allow_html=True,
         )
     with col2:
-        st.metric("Overall Grade", f"{overall_grade} ({overall_score:.0f}점)")
+        st.metric("Overall Grade", f"{overall_grade} ({overall_score:.0f}점)",
+                  help=tip("grade.overall"))
     with col3:
         if fair_value:
             st.metric("Fair Value (종합)", f"${fair_value:,.2f}",
@@ -533,8 +638,8 @@ def _render_ai_report_tab(results: dict):
     data = results.get("data", {})
     ticker = data.get("ticker", "UNKNOWN")
 
-    st.subheader(f"🤖 AI 투자 리포트 — {ticker}")
-    st.caption("LLM이 분석 결과를 종합하여 자연어 투자 리포트를 생성합니다.")
+    st.subheader(t("ai.title", ticker=ticker))
+    st.caption(t("ai.caption"))
 
     # Check for cached report
     cached = st.session_state.get("ai_reports", {}).get(ticker)
@@ -542,14 +647,14 @@ def _render_ai_report_tab(results: dict):
     col_btn, col_clear = st.columns([3, 1])
     with col_btn:
         generate_btn = st.button(
-            "🤖 리포트 생성" if not cached else "🔄 리포트 재생성",
+            t("ai.generate") if not cached else t("ai.regenerate"),
             type="primary",
             use_container_width=True,
             key=f"ai_gen_{ticker}",
         )
     with col_clear:
         if cached:
-            clear_btn = st.button("🗑️ 삭제", key=f"ai_clear_{ticker}")
+            clear_btn = st.button(t("ai.delete"), key=f"ai_clear_{ticker}")
             if clear_btn:
                 st.session_state["ai_reports"].pop(ticker, None)
                 st.rerun()
@@ -566,15 +671,11 @@ def _render_ai_report_tab(results: dict):
 
         # Validate
         if provider != "Ollama" and not api_key:
-            st.error(
-                f"⚠️ {provider} API 키가 설정되지 않았습니다.\n\n"
-                "왼쪽 사이드바 **🤖 AI 리포트** 에서 API 키를 입력하거나 "
-                "`.env` 파일에 설정하세요."
-            )
+            st.error(t("err.api_key_missing", provider=provider))
             return
 
         try:
-            with st.spinner("🤖 AI 리포트 생성 중... (10~30초 소요)"):
+            with st.spinner(t("spinner.ai_report")):
                 report_text = generate_report(
                     results=results,
                     provider=provider,
@@ -589,7 +690,7 @@ def _render_ai_report_tab(results: dict):
                 st.session_state["ai_reports"][ticker] = report_text
                 cached = report_text  # show immediately
             else:
-                st.warning("리포트가 비어있습니다. 다시 시도해주세요.")
+                st.warning(t("ai.empty"))
                 return
 
         except (ValueError, RuntimeError) as e:
@@ -609,7 +710,7 @@ def _render_ai_report_tab(results: dict):
         dl_col1, dl_col2 = st.columns(2)
         with dl_col1:
             st.download_button(
-                "📥 마크다운 다운로드",
+                t("ai.download"),
                 data=cached,
                 file_name=f"{ticker}_AI_Report.md",
                 mime="text/markdown",
@@ -617,7 +718,7 @@ def _render_ai_report_tab(results: dict):
                 key=f"ai_dl_{ticker}",
             )
         with dl_col2:
-            with st.expander("📋 원본 텍스트 보기 (복사용)"):
+            with st.expander(t("ai.copy")):
                 st.code(cached, language="markdown")
 
         # Meta info
@@ -625,27 +726,50 @@ def _render_ai_report_tab(results: dict):
         model = st.session_state.get("ai_model", "?")
         st.caption(f"생성: {provider} / {model}")
     else:
-        st.info(
-            "**🤖 리포트 생성** 버튼을 클릭하면 AI가 분석 결과를 종합하여\n"
-            "자연어 투자 리포트를 작성합니다.\n\n"
-            "💡 사이드바의 **🤖 AI 리포트** 에서 LLM Provider, 모델, "
-            "API 키를 설정하세요."
-        )
+        st.info(t("ai.guide"))
 
 
 # ═══════════════════════════════════════════════════════════
 # TAB RENDERERS
 # ═══════════════════════════════════════════════════════════
 
+def _section_error_check(results: dict, section_keys: list) -> bool:
+    """
+    Check if any of the required sections failed during analysis.
+    Shows a warning and returns True if there's a problem.
+    """
+    errors = results.get("_errors", [])
+    failed = [e for e in errors if e["section"] in section_keys]
+    if failed:
+        names = ", ".join(e["section"] for e in failed)
+        st.warning(t("err.section_fail", names=names))
+    # Also check if critical data is None
+    for key in section_keys:
+        if results.get(key) is None:
+            return True
+    return False
+
+
 def _render_valuation_tab(results: dict):
     from src.charts.all_charts import chart_valuation_comparison, chart_monte_carlo
+    from src.tooltips import tip
+
+    if _section_error_check(results, ["valuation"]):
+        if results.get("valuation") is None:
+            st.info(t("err.no_section_data", section="Valuation"))
+            return
 
     valuation = results["valuation"]
     data = results["data"]
     current_price = data.get("current_price", 0)
 
     # Summary table
-    st.subheader("밸류에이션 모델 비교")
+    st.subheader(t("val.comparison"))
+    with st.expander("ℹ️ Valuation Models Guide", expanded=False):
+        for key in ["val.dcf", "val.reverse_dcf", "val.residual_income",
+                     "val.epv", "val.ddm", "val.multiples", "val.graham"]:
+            st.markdown(tip(key))
+            st.markdown("---")
     summary = valuation.get("models_summary", [])
     if summary:
         df = pd.DataFrame(summary)
@@ -702,7 +826,9 @@ def _render_valuation_tab(results: dict):
 
 def _render_quality_tab(results: dict):
     from src.charts.all_charts import chart_quality_radar
+    from src.tooltips import tip
 
+    _section_error_check(results, ["piotroski", "altman", "beneish", "dupont", "earnings_quality", "eva"])
     data = results["data"]
     piotroski = results["piotroski"]
     altman = results["altman"]
@@ -714,6 +840,11 @@ def _render_quality_tab(results: dict):
 
     # Quality Grade header
     st.subheader(f"Quality Grade: {qg['grade']} ({qg['score']:.0f}/{qg['max_score']})")
+    with st.expander("ℹ️ Quality Scores Guide", expanded=False):
+        for key in ["qual.piotroski", "qual.altman", "qual.beneish",
+                     "qual.dupont", "qual.earnings_quality", "qual.eva"]:
+            st.markdown(tip(key))
+            st.markdown("---")
 
     col_left, col_right = st.columns([1, 1])
 
@@ -832,6 +963,10 @@ def _render_financials_tab(results: dict):
 
 
 def _render_smart_money_tab(results: dict):
+    if _section_error_check(results, ["smart_money", "guru"]):
+        if results.get("smart_money") is None:
+            st.info("스마트머니 데이터를 사용할 수 없습니다.")
+            return
     sm = results["smart_money"]
     data = results["data"]
     guru = results.get("guru", {})
@@ -903,6 +1038,11 @@ def _render_smart_money_tab(results: dict):
 
 def _render_risk_quant_tab(results: dict):
     from src.charts.all_charts import chart_drawdown, chart_price_with_ma
+
+    if _section_error_check(results, ["risk", "quant"]):
+        if results.get("risk") is None or results.get("quant") is None:
+            st.info("리스크/퀀트 데이터를 사용할 수 없습니다.")
+            return
 
     data = results["data"]
     risk = results["risk"]
@@ -979,12 +1119,18 @@ def _render_risk_quant_tab(results: dict):
 
 
 def _render_macro_tab(results: dict):
+    from src.tooltips import tip
+    _section_error_check(results, ["macro"])
     macro = results.get("macro")
     if not macro:
-        st.info("매크로 분석이 비활성화되어 있습니다. 사이드바에서 활성화하세요.")
+        st.info(t("macro.disabled"))
         return
 
     st.subheader("🌍 Macro Environment")
+    with st.expander("ℹ️ Macro Indicators Guide", expanded=False):
+        for key in ["macro.regime", "macro.yield_curve", "macro.vix", "macro.credit_spread"]:
+            st.markdown(tip(key))
+            st.markdown("---")
     st.markdown(f"**{macro.get('summary', '')}**")
     st.info(macro.get("implication", ""))
 
@@ -1032,6 +1178,10 @@ def _render_macro_tab(results: dict):
 
 
 def _render_sector_tab(results: dict):
+    if _section_error_check(results, ["sector_metrics"]):
+        if results.get("sector_metrics") is None:
+            st.info("섹터 데이터를 사용할 수 없습니다.")
+            return
     sm = results["sector_metrics"]
     st.subheader(f"🏭 Sector: {sm['sector_type']}")
     st.caption(f"{sm['sector']} · {sm['industry']}")
@@ -1452,16 +1602,16 @@ def _apply_screener_filters(stocks: list) -> list:
                     if s.get("roe") is not None and s["roe"] * 100 >= min_roe]
 
     # Sort
-    sort_by = st.session_state.get("scr_sort", "Overall Grade ↓")
-    if sort_by == "Overall Grade ↓":
+    sort_by = st.session_state.get("scr_sort", t("sort.grade"))
+    if sort_by == t("sort.grade"):
         filtered.sort(key=lambda x: x.get("grades", {}).get("overall_score", 0), reverse=True)
-    elif sort_by == "시가총액 ↓":
+    elif sort_by == t("sort.cap"):
         filtered.sort(key=lambda x: x.get("market_cap") or 0, reverse=True)
-    elif sort_by == "P/E ↑":
+    elif sort_by == t("sort.pe"):
         filtered.sort(key=lambda x: (x.get("forward_pe") or x.get("trailing_pe") or 999))
-    elif sort_by == "ROE ↓":
+    elif sort_by == t("sort.roe"):
         filtered.sort(key=lambda x: x.get("roe") or 0, reverse=True)
-    elif sort_by == "배당수익률 ↓":
+    elif sort_by == t("sort.div"):
         filtered.sort(key=lambda x: x.get("dividend_yield") or 0, reverse=True)
 
     return filtered
@@ -1489,7 +1639,7 @@ def display_screener():
 
     # ── Run scan if button pressed ───────────────────────
     if scan_btn:
-        st.info(f"🔄 **{scr_universe}** 유니버스 스캔을 시작합니다... (약 5-10분 소요)")
+        st.info(t("spinner.scanning", universe=scr_universe))
         progress_bar = st.progress(0)
         status_text = st.empty()
         scan_data = _scan_universe(universe_key, progress_bar, status_text)
@@ -1498,26 +1648,28 @@ def display_screener():
         progress_bar.empty()
         status_text.empty()
         st.success(
-            f"✅ 스캔 완료! {scan_data['successful']}/{scan_data['total_scanned']}개 종목 성공"
+            t("screener.scan_complete", ok=scan_data['successful'], total=scan_data['total_scanned'])
         )
+        # Show failed tickers if any
+        failed_tickers = scan_data.get("failed_tickers", [])
+        if failed_tickers:
+            with st.expander(t("screener.scan_failed", count=len(failed_tickers))):
+                st.write(", ".join(failed_tickers))
 
     # ── No data yet ──────────────────────────────────────
     if not scan_data:
         universe_tickers = load_universe(universe_key)
         st.info(
-            f"📋 **{scr_universe}** 유니버스: {len(universe_tickers)}개 종목\n\n"
-            f"아직 스캔 데이터가 없습니다. 사이드바의 **🔎 스크리너 필터**에서 "
-            f"**'스크리닝 시작'** 버튼을 클릭하세요.\n\n"
-            f"⏱️ 최초 스캔: 약 5-10분 소요 (이후 24시간 캐시)"
+            t("screener.no_data", universe=scr_universe, count=len(universe_tickers))
         )
         return
 
     # ── Scan summary header ──────────────────────────────
     scan_time = scan_data.get("scan_time", "N/A")
     c1, c2, c3 = st.columns(3)
-    c1.metric("스캔 종목 수", f"{scan_data.get('successful', 0)}")
-    c2.metric("스캔 시간", str(scan_time)[:16])
-    c3.metric("실패", f"{scan_data.get('failed', 0)}")
+    c1.metric(t("screener.scanned"), f"{scan_data.get('successful', 0)}")
+    c2.metric(t("screener.scan_time"), str(scan_time)[:16])
+    c3.metric(t("screener.failed"), f"{scan_data.get('failed', 0)}")
 
     st.markdown("---")
 
@@ -1525,10 +1677,10 @@ def display_screener():
     stocks = scan_data.get("stocks", [])
     filtered = _apply_screener_filters(stocks)
 
-    st.subheader(f"필터 결과: {len(filtered)}개 / {len(stocks)}개 종목")
+    st.subheader(t("screener.filter_result", filtered=len(filtered), total=len(stocks)))
 
     if not filtered:
-        st.warning("조건에 맞는 종목이 없습니다. 필터를 조정해보세요.")
+        st.warning(t("screener.no_match"))
         return
 
     # ── Build display table ──────────────────────────────
@@ -1641,13 +1793,13 @@ def display_portfolio_tab():
         chart_correlation_heatmap, chart_weight_allocation, chart_rolling_sharpe,
     )
 
-    st.header("💼 포트폴리오 시뮬레이터")
+    st.header(t("sidebar.portfolio"))
     st.caption("종목 구성 → 가중치 배정 → 성과/리스크 분석")
 
     # ── Run simulation when button pressed ──────────────
     if simulate_btn:
-        raw_tickers = [t.strip().upper() for t in pf_ticker_input.replace(";", ",").split(",")]
-        tickers = [t for t in raw_tickers if t][:MAX_PORTFOLIO_TICKERS]
+        raw_tickers = [_tk.strip().upper() for _tk in pf_ticker_input.replace(";", ",").split(",")]
+        tickers = [_tk for _tk in raw_tickers if _tk][:MAX_PORTFOLIO_TICKERS]
 
         if len(tickers) < 1:
             st.warning("종목을 최소 1개 입력하세요.")
@@ -1663,7 +1815,7 @@ def display_portfolio_tab():
             st.error("가격 데이터를 가져올 수 없습니다. 티커/기간을 확인하세요.")
             return
 
-        valid_tickers = [t for t in tickers if t in prices.columns]
+        valid_tickers = [_tk for _tk in tickers if _tk in prices.columns]
         if not valid_tickers:
             st.error("유효한 종목 데이터가 없습니다.")
             return
@@ -1679,12 +1831,12 @@ def display_portfolio_tab():
         elif scheme_key == "market_cap":
             import yfinance as yf
             caps = {}
-            for t in valid_tickers:
+            for _tk in valid_tickers:
                 try:
-                    info = yf.Ticker(t).info
-                    caps[t] = info.get("marketCap", 0)
+                    info = yf.Ticker(_tk).info
+                    caps[_tk] = info.get("marketCap", 0)
                 except Exception:
-                    caps[t] = 0
+                    caps[_tk] = 0
             weights = market_cap_weight(valid_tickers, caps)
         elif scheme_key == "inverse_vol":
             weights = inverse_vol_weight(returns_df)
@@ -1695,9 +1847,9 @@ def display_portfolio_tab():
 
         # Compute weighted NAV
         weighted_rets = pd.Series(0.0, index=returns_df.index)
-        for t, w in weights.items():
-            if t in returns_df.columns:
-                weighted_rets += returns_df[t] * w
+        for _tk, w in weights.items():
+            if _tk in returns_df.columns:
+                weighted_rets += returns_df[_tk] * w
         nav = (1 + weighted_rets).cumprod() * pf_capital
 
         # Benchmarks
@@ -1726,10 +1878,7 @@ def display_portfolio_tab():
     # ── Display results ──────────────────────────────────
     pf_data = st.session_state.get("portfolio_results")
     if not pf_data:
-        st.info(
-            "왼쪽 사이드바의 **💼 포트폴리오**에서 종목을 입력하고\n"
-            "**시뮬레이션 실행** 버튼을 클릭하세요."
-        )
+        st.info(t("pf.no_data"))
         return
 
     nav = pf_data["nav"]
@@ -1746,9 +1895,9 @@ def display_portfolio_tab():
         pm = {}
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("총 수익률", f"{pm.get('total_return', 0):.1f}%")
-    c2.metric("연간 수익률", f"{pm.get('annual_return', 0):.1f}%")
-    c3.metric("연간 변동성", f"{pm.get('annual_volatility', 0):.1f}%")
+    c1.metric(t("bt.total_return"), f"{pm.get('total_return', 0):.1f}%")
+    c2.metric(t("bt.annual_return"), f"{pm.get('annual_return', 0):.1f}%")
+    c3.metric(t("bt.annual_vol"), f"{pm.get('annual_volatility', 0):.1f}%")
     c4.metric("Sharpe", f"{pm.get('sharpe_ratio', 0):.2f}")
     c5.metric("MDD", f"{pm.get('max_drawdown', 0):.1f}%")
 
@@ -1845,13 +1994,13 @@ def display_backtest_tab():
         chart_backtest_trades,
     )
 
-    st.header("📈 백테스트")
+    st.header(t("sidebar.backtest"))
     st.caption("과거 데이터를 사용하여 투자 전략의 성과를 시뮬레이션합니다.")
 
     # ── Run backtest ─────────────────────────────────────
     if backtest_btn:
-        raw_tickers = [t.strip().upper() for t in bt_ticker_input.replace(";", ",").split(",")]
-        tickers = [t for t in raw_tickers if t][:MAX_PORTFOLIO_TICKERS]
+        raw_tickers = [_tk.strip().upper() for _tk in bt_ticker_input.replace(";", ",").split(",")]
+        tickers = [_tk for _tk in raw_tickers if _tk][:MAX_PORTFOLIO_TICKERS]
 
         if len(tickers) < 2:
             st.warning("종목을 최소 2개 입력하세요.")
@@ -1898,10 +2047,7 @@ def display_backtest_tab():
     # ── Display results ──────────────────────────────────
     bt_result = st.session_state.get("backtest_results")
     if not bt_result:
-        st.info(
-            "왼쪽 사이드바의 **📈 백테스트**에서 전략/종목을 설정하고\n"
-            "**백테스트 실행** 버튼을 클릭하세요."
-        )
+        st.info(t("bt.no_data"))
         return
 
     metrics = bt_result.metrics
@@ -1952,7 +2098,7 @@ def display_backtest_tab():
         )
 
         if bt_result.trades_log:
-            st.subheader("📋 전체 매매 기록")
+            st.subheader(t("bt.all_trades"))
             trade_rows = []
             for event in bt_result.trades_log:
                 for trade in event.get("trades", []):
@@ -1968,29 +2114,29 @@ def display_backtest_tab():
                 df_trades = pd.DataFrame(trade_rows)
                 st.dataframe(df_trades, use_container_width=True, hide_index=True, height=400)
         else:
-            st.caption("매매 기록이 없습니다.")
+            st.caption(t("bt.no_trades"))
 
     with bt_sub3:
         # Detailed metrics
-        st.subheader("📊 상세 성과 지표")
+        st.subheader(t("bt.detail_metrics"))
         detail_c1, detail_c2, detail_c3 = st.columns(3)
 
         with detail_c1:
-            st.markdown("**수익률**")
-            st.metric("총 수익률", f"{metrics.get('total_return', 0):.2f}%")
-            st.metric("연간 수익률", f"{metrics.get('annual_return', 0):.2f}%")
-            st.metric("벤치마크 수익률", f"{metrics.get('benchmark_return', 0):.2f}%")
-            st.metric("벤치마크 연간수익", f"{metrics.get('benchmark_ann_return', 0):.2f}%")
+            st.markdown(t("bt.returns"))
+            st.metric(t("bt.total_return"), f"{metrics.get('total_return', 0):.2f}%")
+            st.metric(t("bt.annual_return"), f"{metrics.get('annual_return', 0):.2f}%")
+            st.metric(t("bt.benchmark_return"), f"{metrics.get('benchmark_return', 0):.2f}%")
+            st.metric(t("bt.benchmark_return"), f"{metrics.get('benchmark_ann_return', 0):.2f}%")
 
         with detail_c2:
-            st.markdown("**리스크**")
-            st.metric("연간 변동성", f"{metrics.get('annual_volatility', 0):.2f}%")
+            st.markdown(t("bt.risk"))
+            st.metric(t("bt.annual_vol"), f"{metrics.get('annual_volatility', 0):.2f}%")
             st.metric("Max Drawdown", f"{metrics.get('max_drawdown', 0):.2f}%")
             st.metric("Calmar Ratio", f"{metrics.get('calmar_ratio', 0):.2f}")
-            st.metric("승률", f"{metrics.get('win_rate', 0):.1f}%")
+            st.metric(t("bt.win_rate"), f"{metrics.get('win_rate', 0):.1f}%")
 
         with detail_c3:
-            st.markdown("**시장 대비**")
+            st.markdown(t("bt.vs_market"))
             st.metric("Alpha", f"{metrics.get('alpha', 0):.2f}%")
             st.metric("Beta", f"{metrics.get('beta', 0):.2f}")
             st.metric("Sharpe", f"{metrics.get('sharpe_ratio', 0):.2f}")
@@ -1998,11 +2144,11 @@ def display_backtest_tab():
 
         # Weights history
         if bt_result.weights_history:
-            st.subheader("📊 리밸런싱별 비중 변화")
+            st.subheader(t("bt.weight_history"))
             wh_rows = []
             for wh in bt_result.weights_history:
                 row = {"날짜": wh["date"]}
-                row.update({t: f"{w*100:.1f}%" for t, w in wh["weights"].items()})
+                row.update({_tk: f"{w*100:.1f}%" for _tk, w in wh["weights"].items()})
                 wh_rows.append(row)
             df_wh = pd.DataFrame(wh_rows)
             st.dataframe(df_wh, use_container_width=True, hide_index=True, height=300)
@@ -2037,7 +2183,7 @@ if "ai_reports" not in st.session_state:
 
 # ── Main Tabs ────────────────────────────────────────────
 tab_analysis, tab_screener, tab_guru, tab_portfolio, tab_backtest = st.tabs([
-    "📊 종목 분석", "🔎 스크리너", "🏦 13F 구루", "💼 포트폴리오", "📈 백테스트"
+    t("tab.analysis"), t("tab.screener"), t("tab.guru"), t("tab.portfolio"), t("tab.backtest")
 ])
 
 
@@ -2067,9 +2213,9 @@ with tab_analysis:
             if new_results:
                 st.session_state["all_results"] = new_results
             else:
-                st.error("분석할 수 있는 종목이 없습니다. 티커를 확인해주세요.")
+                st.error(t("err.no_tickers"))
         else:
-            st.warning("티커를 입력해주세요.")
+            st.warning(t("err.enter_ticker"))
 
     all_results = st.session_state.get("all_results")
 
@@ -2085,8 +2231,9 @@ with tab_analysis:
                     display_single_ticker(r)
             display_comparison(all_results)
     else:
-        st.title("📊 Stock Intrinsic Value Analyzer")
-        st.markdown("""
+        st.title(t("home.title"))
+        if get_language() == "ko":
+            st.markdown("""
         **미국 주식의 적정 가치를 분석하는 도구입니다.**
 
         왼쪽 사이드바에서 **📊 종목 분석**을 펼치고 티커를 입력 후
@@ -2100,19 +2247,23 @@ with tab_analysis:
         - 매크로 환경 (수익률곡선, VIX, 신용 스프레드)
         - 리스크 지표 (Sharpe, Sortino, VaR, Max Drawdown)
         - 섹터별 전문 지표
+            """)
+        else:
+            st.markdown("""
+        **A comprehensive US stock intrinsic value analysis tool.**
 
-        **🔎 스크리너:** S&P 500 / NASDAQ 100 종목을 필터링하여
-        등급 기반으로 유망 종목을 찾을 수 있습니다.
+        Open **📊 Stock Analysis** in the sidebar, enter ticker(s), and
+        click **"Start Analysis"**.
 
-        **🏦 13F 구루:** 버핏, 달리오 등 유명 투자자의
-        SEC 13F 공시 기반 포트폴리오와 보유 종목을 조회할 수 있습니다.
-
-        **💼 포트폴리오:** 종목 구성과 가중치를 설정하여
-        포트폴리오 수익률, 리스크, 팩터 노출도를 분석합니다.
-
-        **📈 백테스트:** 4가지 전략(동일비중, 모멘텀, MA크로스, 등급기반)으로
-        과거 성과를 시뮬레이션합니다.
-        """)
+        **Analysis includes:**
+        - 7 Valuation Models (DCF, Reverse DCF, Residual Income, EPV, DDM, Multiples, Graham)
+        - Quality Scores (Piotroski F-Score, Altman Z-Score, Beneish M-Score, DuPont)
+        - Smart Money Signals (Insider Trades, Institutional Holdings, Short Interest)
+        - Quant/Technical (Momentum, RSI, Bollinger Bands, Moving Averages)
+        - Macro Environment (Yield Curve, VIX, Credit Spread)
+        - Risk Metrics (Sharpe, Sortino, VaR, Max Drawdown)
+        - Sector-Specific Metrics
+            """)
 
 # ──────────── TAB: SCREENER ──────────────────────────────
 with tab_screener:

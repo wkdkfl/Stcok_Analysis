@@ -2,11 +2,13 @@
 Yahoo Finance data fetcher — primary data source for all financial data.
 Uses yfinance library for price, financials, balance sheet, cash flow,
 analyst estimates, insider transactions, and options data.
+Parallelized: .info first, then remaining sub-calls via ThreadPool.
 """
 
 import yfinance as yf
 import pandas as pd
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, Optional
 import streamlit as st
 import os
@@ -99,31 +101,45 @@ def fetch_stock_data(ticker: str) -> Dict[str, Any]:
     data["held_pct_institutions"] = info.get("heldPercentInstitutions", None)
 
     # ── Financial Statements (Annual, up to 4 years) ─────
-    data["income_stmt"] = _safe_financials(t, "annual", "income")
-    data["balance_sheet"] = _safe_financials(t, "annual", "balance")
-    data["cashflow"] = _safe_financials(t, "annual", "cashflow")
+    # ── Parallel fetch: statements, history, holders, options ──
+    def _f_inc_a(): return _safe_financials(t, "annual", "income")
+    def _f_bs_a(): return _safe_financials(t, "annual", "balance")
+    def _f_cf_a(): return _safe_financials(t, "annual", "cashflow")
+    def _f_inc_q(): return _safe_financials(t, "quarterly", "income")
+    def _f_bs_q(): return _safe_financials(t, "quarterly", "balance")
+    def _f_cf_q(): return _safe_financials(t, "quarterly", "cashflow")
+    def _f_hist(): return _safe_history(t, period="5y", interval="1d")
+    def _f_insider(): return _safe_attr(t, "insider_transactions")
+    def _f_inst(): return _safe_attr(t, "institutional_holders")
+    def _f_major(): return _safe_attr(t, "major_holders")
+    def _f_earnings(): return _safe_attr(t, "earnings_history")
+    def _f_opt_dates(): return _safe_options_dates(t)
+    def _f_opt_chain(): return _safe_options_chain(t)
 
-    # ── Quarterly Statements ─────────────────────────────
-    data["income_stmt_q"] = _safe_financials(t, "quarterly", "income")
-    data["balance_sheet_q"] = _safe_financials(t, "quarterly", "balance")
-    data["cashflow_q"] = _safe_financials(t, "quarterly", "cashflow")
+    tasks = {
+        "income_stmt": _f_inc_a,
+        "balance_sheet": _f_bs_a,
+        "cashflow": _f_cf_a,
+        "income_stmt_q": _f_inc_q,
+        "balance_sheet_q": _f_bs_q,
+        "cashflow_q": _f_cf_q,
+        "history": _f_hist,
+        "insider_transactions": _f_insider,
+        "institutional_holders": _f_inst,
+        "major_holders": _f_major,
+        "earnings_history": _f_earnings,
+        "options_dates": _f_opt_dates,
+        "options_chain": _f_opt_chain,
+    }
 
-    # ── Historical Prices (5 years daily) ────────────────
-    data["history"] = _safe_history(t, period="5y", interval="1d")
-
-    # ── Insider Transactions ─────────────────────────────
-    data["insider_transactions"] = _safe_attr(t, "insider_transactions")
-
-    # ── Institutional Holders ────────────────────────────
-    data["institutional_holders"] = _safe_attr(t, "institutional_holders")
-    data["major_holders"] = _safe_attr(t, "major_holders")
-
-    # ── Earnings History / Surprises ─────────────────────
-    data["earnings_history"] = _safe_attr(t, "earnings_history")
-
-    # ── Options Chain (nearest expiry for put/call ratio) ─
-    data["options_dates"] = _safe_options_dates(t)
-    data["options_chain"] = _safe_options_chain(t)
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(fn): key for key, fn in tasks.items()}
+        for future in as_completed(futures):
+            key = futures[future]
+            try:
+                data[key] = future.result()
+            except Exception:
+                data[key] = None
 
     # ── Derived Metrics ──────────────────────────────────
     data = _compute_derived(data, info)
