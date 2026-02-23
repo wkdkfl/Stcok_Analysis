@@ -17,6 +17,7 @@ from config import (
     MAX_TICKERS, DCF_DEFAULTS, SCREENER_UNIVERSES, SECTOR_MULTIPLES_FALLBACK,
     MAX_PORTFOLIO_TICKERS, BENCHMARKS, BACKTEST_DEFAULTS, STRATEGY_NAMES,
     WEIGHT_SCHEME_NAMES, REBALANCE_FREQ_MAP,
+    OPENAI_API_KEY, ANTHROPIC_API_KEY, AI_REPORT_DEFAULTS,
 )
 
 # ── Page Config ──────────────────────────────────────────
@@ -256,6 +257,50 @@ with st.sidebar:
             use_container_width=True, key="backtest_btn",
         )
 
+    # ── AI 리포트 ────────────────────────────────────
+    with st.expander("🤖 AI 리포트", expanded=False):
+        from src.report.generator import PROVIDER_LIST, PROVIDER_MODELS
+
+        ai_provider = st.selectbox(
+            "LLM Provider",
+            PROVIDER_LIST,
+            index=PROVIDER_LIST.index(AI_REPORT_DEFAULTS["default_provider"]),
+            key="ai_provider",
+        )
+        ai_model = st.selectbox(
+            "Model",
+            PROVIDER_MODELS.get(ai_provider, ["gpt-4o-mini"]),
+            index=0,
+            key="ai_model",
+        )
+
+        # API key: .env 로드 → 사이드바 fallback
+        _default_key = ""
+        if ai_provider == "OpenAI":
+            _default_key = OPENAI_API_KEY
+        elif ai_provider == "Anthropic":
+            _default_key = ANTHROPIC_API_KEY
+
+        if ai_provider != "Ollama":
+            ai_api_key = st.text_input(
+                "API Key",
+                value=_default_key,
+                type="password",
+                key="ai_api_key",
+                help=".env 파일에 키가 있으면 자동 로드됩니다",
+            )
+        else:
+            ai_api_key = ""
+            st.caption("ℹ️ Ollama는 로컬 LLM이므로 API 키가 필요없습니다.")
+
+        ai_language = st.radio(
+            "리포트 언어",
+            ["한국어", "English"],
+            index=0,
+            key="ai_language",
+            horizontal=True,
+        )
+
     st.markdown("---")
     st.caption("Data: Yahoo Finance | FRED | SEC EDGAR")
     st.caption("Models: DCF, Reverse DCF, Residual Income, EPV, DDM, Multiples, Graham")
@@ -443,7 +488,7 @@ def display_single_ticker(results: dict):
     tabs = st.tabs([
         "📈 Valuation", "🏅 Quality", "💰 Financials",
         "🧠 Smart Money", "⚡ Risk & Quant",
-        "🌍 Macro", "🏭 Sector"
+        "🌍 Macro", "🏭 Sector", "🤖 AI 리포트"
     ])
 
     # ──────────── TAB: VALUATION ─────────────────────────
@@ -473,6 +518,119 @@ def display_single_ticker(results: dict):
     # ──────────── TAB: SECTOR ────────────────────────────
     with tabs[6]:
         _render_sector_tab(results)
+
+    # ──────────── TAB: AI REPORT ─────────────────────────
+    with tabs[7]:
+        _render_ai_report_tab(results)
+
+
+# ═══════════════════════════════════════════════════════════
+# AI REPORT RENDERER
+# ═══════════════════════════════════════════════════════════
+
+def _render_ai_report_tab(results: dict):
+    """Render the AI investment report sub-tab."""
+    data = results.get("data", {})
+    ticker = data.get("ticker", "UNKNOWN")
+
+    st.subheader(f"🤖 AI 투자 리포트 — {ticker}")
+    st.caption("LLM이 분석 결과를 종합하여 자연어 투자 리포트를 생성합니다.")
+
+    # Check for cached report
+    cached = st.session_state.get("ai_reports", {}).get(ticker)
+
+    col_btn, col_clear = st.columns([3, 1])
+    with col_btn:
+        generate_btn = st.button(
+            "🤖 리포트 생성" if not cached else "🔄 리포트 재생성",
+            type="primary",
+            use_container_width=True,
+            key=f"ai_gen_{ticker}",
+        )
+    with col_clear:
+        if cached:
+            clear_btn = st.button("🗑️ 삭제", key=f"ai_clear_{ticker}")
+            if clear_btn:
+                st.session_state["ai_reports"].pop(ticker, None)
+                st.rerun()
+
+    if generate_btn:
+        from src.report.generator import generate_report
+
+        # Read sidebar settings
+        provider = st.session_state.get("ai_provider", "OpenAI")
+        model = st.session_state.get("ai_model", "gpt-4o-mini")
+        api_key = st.session_state.get("ai_api_key", "")
+        lang_label = st.session_state.get("ai_language", "한국어")
+        language = "ko" if lang_label == "한국어" else "en"
+
+        # Validate
+        if provider != "Ollama" and not api_key:
+            st.error(
+                f"⚠️ {provider} API 키가 설정되지 않았습니다.\n\n"
+                "왼쪽 사이드바 **🤖 AI 리포트** 에서 API 키를 입력하거나 "
+                "`.env` 파일에 설정하세요."
+            )
+            return
+
+        try:
+            with st.spinner("🤖 AI 리포트 생성 중... (10~30초 소요)"):
+                report_text = generate_report(
+                    results=results,
+                    provider=provider,
+                    api_key=api_key,
+                    model=model,
+                    language=language,
+                )
+
+            if report_text:
+                if "ai_reports" not in st.session_state:
+                    st.session_state["ai_reports"] = {}
+                st.session_state["ai_reports"][ticker] = report_text
+                cached = report_text  # show immediately
+            else:
+                st.warning("리포트가 비어있습니다. 다시 시도해주세요.")
+                return
+
+        except (ValueError, RuntimeError) as e:
+            st.error(f"❌ {e}")
+            return
+        except Exception as e:
+            st.error(f"❌ 예상치 못한 오류: {e}")
+            return
+
+    # Display report
+    if cached:
+        st.markdown("---")
+        st.markdown(cached)
+        st.markdown("---")
+
+        # Download & Copy
+        dl_col1, dl_col2 = st.columns(2)
+        with dl_col1:
+            st.download_button(
+                "📥 마크다운 다운로드",
+                data=cached,
+                file_name=f"{ticker}_AI_Report.md",
+                mime="text/markdown",
+                use_container_width=True,
+                key=f"ai_dl_{ticker}",
+            )
+        with dl_col2:
+            with st.expander("📋 원본 텍스트 보기 (복사용)"):
+                st.code(cached, language="markdown")
+
+        # Meta info
+        provider = st.session_state.get("ai_provider", "?")
+        model = st.session_state.get("ai_model", "?")
+        st.caption(f"생성: {provider} / {model}")
+    else:
+        st.info(
+            "**🤖 리포트 생성** 버튼을 클릭하면 AI가 분석 결과를 종합하여\n"
+            "자연어 투자 리포트를 작성합니다.\n\n"
+            "💡 사이드바의 **🤖 AI 리포트** 에서 LLM Provider, 모델, "
+            "API 키를 설정하세요."
+        )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1874,6 +2032,8 @@ if "portfolio_results" not in st.session_state:
     st.session_state["portfolio_results"] = None
 if "backtest_results" not in st.session_state:
     st.session_state["backtest_results"] = None
+if "ai_reports" not in st.session_state:
+    st.session_state["ai_reports"] = {}  # {ticker: report_text}
 
 # ── Main Tabs ────────────────────────────────────────────
 tab_analysis, tab_screener, tab_guru, tab_portfolio, tab_backtest = st.tabs([

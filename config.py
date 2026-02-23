@@ -1,10 +1,19 @@
 """
 Global configuration for Stock Intrinsic Value Analyzer.
 """
+import os
+from dotenv import load_dotenv
+
+load_dotenv()  # .env 파일에서 환경변수 로드
+
+# ── API Keys (from .env) ────────────────────────────────────
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
 # ── FRED API ────────────────────────────────────────────────
 # 무료 키 발급: https://fred.stlouisfed.org/docs/api/api_key.html
-FRED_API_KEY = ""  # 여기에 FRED API 키를 입력하세요 (없어도 기본 동작 가능)
+FRED_API_KEY = os.environ.get("FRED_API_KEY", "")  # .env 또는 직접 입력
 
 # ── DCF 기본 가정 ───────────────────────────────────────────
 DCF_DEFAULTS = {
@@ -154,4 +163,12 @@ REBALANCE_FREQ_MAP = {
     "분기 (Quarterly)": "Q",
     "반기 (6-Month)": "6M",
     "연간 (Yearly)": "Y",
+}
+
+# ── AI Report ────────────────────────────────────────────────
+AI_REPORT_DEFAULTS = {
+    "default_provider": "OpenAI",
+    "default_model": "gpt-4o-mini",
+    "max_tokens": 2500,
+    "temperature": 0.4,
 }

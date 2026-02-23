@@ -8,5 +8,9 @@ scipy>=1.11.0
 requests>=2.31.0
 fredapi>=0.5.1
 lxml>=4.9.0
+python-dotenv>=1.0.0
+openai>=1.0.0
+# anthropic>=0.20.0  # optional — Python >=3.8 필요. 없어도 raw HTTP fallback 사용
 # curl_cffi — yfinance 1.x SSL impersonation (usually installed as yfinance dep)
 # SEC EDGAR 13F: uses requests (no extra dep)
+# Ollama: uses requests (no extra dep — local LLM)
