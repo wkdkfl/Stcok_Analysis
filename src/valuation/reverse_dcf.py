@@ -11,13 +11,15 @@ import sys, os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import DCF_DEFAULTS
+from src.market_context import get_dcf_overrides
 
 
 def compute_reverse_dcf(data: Dict[str, Any], overrides: Optional[Dict] = None) -> Dict[str, Any]:
     """
     Solve for the implied growth rate that justifies the current market price.
     """
-    cfg = {**DCF_DEFAULTS, **(overrides or {})}
+    market = data.get("market", "US")
+    cfg = {**DCF_DEFAULTS, **get_dcf_overrides(market), **(overrides or {})}
     result = {
         "model": "Reverse DCF",
         "implied_growth_rate": None,

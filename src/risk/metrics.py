@@ -10,6 +10,7 @@ import sys, os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import DCF_DEFAULTS
+from src.market_context import get_market_defaults
 
 
 def compute_risk_metrics(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -86,7 +87,8 @@ def _compute_return_metrics(data: Dict[str, Any]) -> Dict[str, Any]:
     if len(daily_returns) < 50:
         return result
 
-    rf_daily = DCF_DEFAULTS["risk_free_rate"] / 252
+    _mkt = data.get("market", "US")
+    rf_daily = get_market_defaults(_mkt)["risk_free_rate"] / 252
 
     # Annualized return
     total_days = len(daily_returns)
@@ -145,7 +147,8 @@ def _compute_leverage(data: Dict[str, Any]) -> Dict[str, Any]:
     # Hamada Beta (unlevered)
     beta = data.get("beta")
     de = data.get("debt_to_equity")
-    tax = DCF_DEFAULTS["tax_rate"]
+    _mkt_lev = data.get("market", "US")
+    tax = get_market_defaults(_mkt_lev)["tax_rate"]
     if beta and de:
         unlevered_beta = beta / (1 + (1 - tax) * de)
         result["unlevered_beta"] = round(unlevered_beta, 2)

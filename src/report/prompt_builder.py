@@ -4,6 +4,10 @@ LLM prompt for investment report generation.
 """
 
 from typing import Dict, Any, Tuple
+from src.market_context import format_money as _mc_format_money, get_currency_symbol
+
+# Thread currency through prompt builder — set per build call
+_active_currency: str = "USD"
 
 # ── System Prompts ───────────────────────────────────────────
 
@@ -64,19 +68,7 @@ def _fmt_num(v, dp=2, default="N/A") -> str:
 
 
 def _fmt_money(v, default="N/A") -> str:
-    if v is None or v == "N/A":
-        return default
-    try:
-        v = float(v)
-        if v >= 1e12:
-            return f"${v/1e12:.1f}T"
-        if v >= 1e9:
-            return f"${v/1e9:.1f}B"
-        if v >= 1e6:
-            return f"${v/1e6:.0f}M"
-        return f"${v:,.0f}"
-    except (ValueError, TypeError):
-        return str(v)
+    return _mc_format_money(v, _active_currency, default)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -84,16 +76,18 @@ def _fmt_money(v, default="N/A") -> str:
 # ═══════════════════════════════════════════════════════════
 
 def _build_stock_info(data: dict) -> str:
+    _sym = get_currency_symbol(_active_currency)
     return f"""## 종목 정보
 - 종목: {data.get('name','?')} ({data.get('ticker','?')})
 - 섹터/산업: {data.get('sector','?')} / {data.get('industry','?')}
 - 국가: {data.get('country','?')}
-- 현재가: ${_fmt_num(data.get('current_price'), 2)}
+- 현재가: {_sym}{_fmt_num(data.get('current_price'), 2)}
 - 시가총액: {_fmt_money(data.get('market_cap'))}
 - Beta: {_fmt_num(data.get('beta'), 2)}"""
 
 
 def _build_valuation(val: dict) -> str:
+    _sym = get_currency_symbol(_active_currency)
     fv = _fmt_num(_safe(val, 'fair_value'), 2)
     upside = _fmt_pct(_safe(val, 'upside_pct'))
     signal = _safe(val, 'signal')
@@ -105,7 +99,7 @@ def _build_valuation(val: dict) -> str:
         mv = _fmt_num(m.get('fair_value'), 2)
         mu = _fmt_pct(m.get('upside_pct'))
         conf = m.get('confidence', '?')
-        models_lines.append(f"  - {name}: ${mv} (Upside {mu}, Confidence: {conf})")
+        models_lines.append(f"  - {name}: {_sym}{mv} (Upside {mu}, Confidence: {conf})")
 
     # Reverse DCF
     rev = _safe(val, 'models', 'reverse_dcf', default={})
@@ -114,10 +108,10 @@ def _build_valuation(val: dict) -> str:
 
     range_str = ""
     if isinstance(fv_range, (list, tuple)) and len(fv_range) == 2:
-        range_str = f"${_fmt_num(fv_range[0],2)} ~ ${_fmt_num(fv_range[1],2)}"
+        range_str = f"{_sym}{_fmt_num(fv_range[0],2)} ~ {_sym}{_fmt_num(fv_range[1],2)}"
 
     return f"""## 밸류에이션
-- 종합 적정가: ${fv}
+- 종합 적정가: {_sym}{fv}
 - 상승여력(Upside): {upside}
 - 밸류에이션 레인지: {range_str}
 - 종합 시그널: {signal}
@@ -271,6 +265,10 @@ def build_analysis_prompt(results: dict, language: str = "ko") -> Tuple[str, str
     (system_prompt, user_prompt)
     """
     data = results.get("data") or {}
+    currency = data.get("currency", "USD")
+    global _active_currency
+    _active_currency = currency
+
     val = results.get("valuation") or {}
     sm = results.get("smart_money") or {}
     guru = results.get("guru") or {}

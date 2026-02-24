@@ -12,6 +12,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import DCF_DEFAULTS
 from src.fetcher.yahoo import get_stmt_series, _get_stmt_value
+from src.market_context import get_dcf_overrides
 
 
 def compute_dcf(data: Dict[str, Any], overrides: Optional[Dict] = None) -> Dict[str, Any]:
@@ -25,7 +26,8 @@ def compute_dcf(data: Dict[str, Any], overrides: Optional[Dict] = None) -> Dict[
     Returns:
         Dictionary with fair_value, upside_pct, mc_distribution, etc.
     """
-    cfg = {**DCF_DEFAULTS, **(overrides or {})}
+    market = data.get("market", "US")
+    cfg = {**DCF_DEFAULTS, **get_dcf_overrides(market), **(overrides or {})}
     result = {
         "model": "Multi-Stage DCF",
         "fair_value": None,

@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 import json, os, sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-from config import SECTOR_MULTIPLES_FALLBACK
+from config import SECTOR_MULTIPLES_FALLBACK, KR_SECTOR_MULTIPLES_FALLBACK
 
 
 def compute_multiples(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -37,7 +37,8 @@ def compute_multiples(data: Dict[str, Any]) -> Dict[str, Any]:
         return result
 
     # Load sector benchmarks
-    benchmarks = _load_sector_benchmarks(sector)
+    market = data.get("market", "US")
+    benchmarks = _load_sector_benchmarks(sector, market)
 
     values = []
     weights = []
@@ -124,7 +125,7 @@ def compute_multiples(data: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def _load_sector_benchmarks(sector: str) -> dict:
+def _load_sector_benchmarks(sector: str, market: str = "US") -> dict:
     """Load sector benchmarks from JSON file or fallback config."""
     # Try to load from data file
     json_path = os.path.join(os.path.dirname(__file__), "..", "..", "data", "sector_benchmarks.json")
@@ -132,10 +133,15 @@ def _load_sector_benchmarks(sector: str) -> dict:
         if os.path.exists(json_path):
             with open(json_path, "r") as f:
                 benchmarks = json.load(f)
+                # Check market-specific section first
+                if market == "KR" and "KR" in benchmarks and sector in benchmarks["KR"]:
+                    return benchmarks["KR"][sector]
                 if sector in benchmarks:
                     return benchmarks[sector]
     except Exception:
         pass
 
-    # Fallback to config
+    # Fallback to config (market-specific)
+    if market == "KR":
+        return KR_SECTOR_MULTIPLES_FALLBACK.get(sector, {"ev_ebitda": 10.0, "pe": 12.0, "ps": 1.5})
     return SECTOR_MULTIPLES_FALLBACK.get(sector, {"ev_ebitda": 15.0, "pe": 18.0, "ps": 3.0})

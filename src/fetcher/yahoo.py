@@ -40,6 +40,10 @@ def fetch_stock_data(ticker: str) -> Dict[str, Any]:
     data["currency"] = info.get("currency", "USD")
     data["exchange"] = info.get("exchange", "")
 
+    # ── Market detection ─────────────────────────────────
+    from src.market_context import detect_market_from_data
+    data["market"] = detect_market_from_data(data)
+
     # ── Price & Market Data ──────────────────────────────
     data["current_price"] = info.get("currentPrice", info.get("regularMarketPrice", None))
     data["market_cap"] = info.get("marketCap", None)
@@ -316,7 +320,10 @@ def _compute_derived(data: Dict[str, Any], info: dict) -> Dict[str, Any]:
     data["current_ratio"] = _safe_div(data.get("current_assets"), data.get("current_liabilities"))
 
     # ── NOPAT & Invested Capital (for ROIC) ──────────────
-    tax_rate = info.get("taxRate", 0.21)
+    from src.market_context import detect_market, get_market_defaults
+    _mkt = detect_market(data.get("ticker", ""))
+    _mkt_defaults = get_market_defaults(_mkt)
+    tax_rate = info.get("taxRate", _mkt_defaults["tax_rate"])
     if isinstance(tax_rate, (int, float)) and data.get("ebit"):
         data["nopat"] = data["ebit"] * (1 - tax_rate)
     else:

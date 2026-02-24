@@ -30,11 +30,15 @@ def _get_fred_client():
 
 
 @st.cache_data(ttl=CACHE_TTL, show_spinner=False)
-def fetch_macro_data() -> Dict[str, Any]:
+def fetch_macro_data(market: str = "US") -> Dict[str, Any]:
     """
     Fetch macro-economic data from FRED API (or fallback to yfinance).
+    For Korean market, fetches Korean macro indicators.
     Returns dictionary of macro indicators.
     """
+    if market == "KR":
+        return _fetch_korean_macro()
+
     data: Dict[str, Any] = {}
     fred = _get_fred_client()
 
@@ -158,8 +162,10 @@ def _fetch_from_yfinance_fallback() -> Dict[str, Any]:
 
 
 @st.cache_data(ttl=CACHE_TTL, show_spinner=False)
-def get_risk_free_rate() -> float:
-    """Get current risk-free rate (10Y Treasury / 100)."""
+def get_risk_free_rate(market: str = "US") -> float:
+    """Get current risk-free rate. US: 10Y Treasury / KR: ~3.5% fallback."""
+    if market == "KR":
+        return 0.035  # 한국 국고채 10년물 근사값
     try:
         tnx = yf.Ticker("^TNX", session=_session)
         h = tnx.history(period="5d")
@@ -168,3 +174,80 @@ def get_risk_free_rate() -> float:
         return 0.043  # fallback
     except Exception:
         return 0.043
+
+
+@st.cache_data(ttl=CACHE_TTL, show_spinner=False)
+def _fetch_korean_macro() -> Dict[str, Any]:
+    """
+    Fetch Korean macro indicators via yfinance (KOSPI index, etc.).
+    BOK ECOS API 없이도 기본적인 한국 매크로 환경을 제공합니다.
+    """
+    data: Dict[str, Any] = {}
+
+    # KOSPI 지수
+    try:
+        kospi = yf.Ticker("^KS11", session=_session)
+        h = kospi.history(period="5d")
+        if h is not None and not h.empty:
+            data["kospi_level"] = float(h["Close"].iloc[-1])
+    except Exception:
+        data["kospi_level"] = None
+
+    # KOSDAQ 지수
+    try:
+        kosdaq = yf.Ticker("^KQ11", session=_session)
+        h = kosdaq.history(period="5d")
+        if h is not None and not h.empty:
+            data["kosdaq_level"] = float(h["Close"].iloc[-1])
+    except Exception:
+        data["kosdaq_level"] = None
+
+    # 한국 관련 지표 (고정 근사값 — BOK ECOS API 연동 시 동적 업데이트 가능)
+    data["treasury_10y"] = 3.5       # 국고채 10년물 (근사)
+    data["treasury_2y"] = 3.2        # 국고채 2년물 (근사)
+    data["yield_spread"] = 0.3
+    data["yield_curve_inverted"] = False
+    data["bok_base_rate"] = 3.0      # 한은 기준금리 (근사)
+    data["fed_funds"] = data["bok_base_rate"]  # 매크로 레짐 호환용
+
+    # VIX 대용 — CBOE VIX를 참고 지표로 폴백
+    try:
+        vix = yf.Ticker("^VIX", session=_session)
+        h = vix.history(period="5d")
+        if h is not None and not h.empty:
+            data["vix"] = float(h["Close"].iloc[-1])
+    except Exception:
+        data["vix"] = None
+
+    # VIX regime
+    vix_val = data.get("vix")
+    if vix_val is not None:
+        if vix_val < 15:
+            data["vix_regime"] = "Low Volatility (안정)"
+        elif vix_val < 20:
+            data["vix_regime"] = "Normal (보통)"
+        elif vix_val < 30:
+            data["vix_regime"] = "Elevated (경계)"
+        else:
+            data["vix_regime"] = "High Volatility (공포)"
+    else:
+        data["vix_regime"] = "N/A"
+
+    # 신용 스프레드 — 한국 데이터 미지원, N/A 처리
+    data["ig_spread"] = None
+    data["hy_spread"] = None
+    data["credit_regime"] = "N/A"
+    data["consumer_sentiment"] = None
+
+    # ERP — KOSPI P/E 기반 추정
+    try:
+        kospi_info = yf.Ticker("^KS11", session=_session).info or {}
+        kospi_pe = kospi_info.get("trailingPE", None)
+        if kospi_pe and data.get("treasury_10y") is not None:
+            data["equity_risk_premium"] = (1 / kospi_pe) - (data["treasury_10y"] / 100)
+        else:
+            data["equity_risk_premium"] = 0.065
+    except Exception:
+        data["equity_risk_premium"] = 0.065
+
+    return data

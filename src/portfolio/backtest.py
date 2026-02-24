@@ -13,6 +13,7 @@ import pandas as pd
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 from enum import Enum
+from src.market_context import detect_market, get_market_defaults
 
 
 class Strategy(Enum):
@@ -70,17 +71,21 @@ def run_backtest(config: BacktestConfig, prices: pd.DataFrame,
     prices = prices.loc[common_idx]
     benchmark_prices = benchmark_prices.loc[common_idx]
 
+    # Detect market from tickers
+    _any_kr = any(detect_market(t) == "KR" for t in config.tickers)
+    _rf = get_market_defaults("KR" if _any_kr else "US")["risk_free_rate"]
+
     # Dispatch to strategy
     if config.strategy == Strategy.EQUAL_WEIGHT:
-        return _run_equal_weight(config, prices, benchmark_prices)
+        return _run_equal_weight(config, prices, benchmark_prices, _rf)
     elif config.strategy == Strategy.MOMENTUM:
-        return _run_momentum(config, prices, benchmark_prices)
+        return _run_momentum(config, prices, benchmark_prices, _rf)
     elif config.strategy == Strategy.MA_CROSSOVER:
-        return _run_ma_crossover(config, prices, benchmark_prices)
+        return _run_ma_crossover(config, prices, benchmark_prices, _rf)
     elif config.strategy == Strategy.SCREENER_GRADE:
-        return _run_screener_grade(config, prices, benchmark_prices)
+        return _run_screener_grade(config, prices, benchmark_prices, _rf)
     else:
-        return _run_equal_weight(config, prices, benchmark_prices)
+        return _run_equal_weight(config, prices, benchmark_prices, _rf)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -262,7 +267,7 @@ def _compute_metrics(nav: pd.Series, bench_nav: pd.Series, rf_annual: float = 0.
 # Strategy 1: Equal-Weight Buy & Hold
 # ═══════════════════════════════════════════════════════════
 
-def _run_equal_weight(config, prices, benchmark_prices):
+def _run_equal_weight(config, prices, benchmark_prices, rf_annual=0.043):
     tickers = [t for t in config.tickers if t in prices.columns]
     if not tickers:
         raise ValueError("유효한 종목이 없습니다.")
@@ -279,7 +284,7 @@ def _run_equal_weight(config, prices, benchmark_prices):
     nav, trades, weights_hist = _compute_nav(prices, weights_map,
                                               config.initial_capital, config.transaction_cost)
     bench_nav = _build_benchmark_nav(benchmark_prices, config.initial_capital)
-    metrics = _compute_metrics(nav, bench_nav)
+    metrics = _compute_metrics(nav, bench_nav, rf_annual)
 
     return BacktestResult(
         nav_series=nav,
@@ -295,7 +300,7 @@ def _run_equal_weight(config, prices, benchmark_prices):
 # Strategy 2: Momentum (12-1 month)
 # ═══════════════════════════════════════════════════════════
 
-def _run_momentum(config, prices, benchmark_prices):
+def _run_momentum(config, prices, benchmark_prices, rf_annual=0.043):
     rebal_dates = _get_rebalance_dates(prices.index, config.rebalance_freq)
     top_n = min(config.top_n, len(prices.columns))
 
@@ -338,7 +343,7 @@ def _run_momentum(config, prices, benchmark_prices):
     nav, trades, weights_hist = _compute_nav(prices, weights_map,
                                               config.initial_capital, config.transaction_cost)
     bench_nav = _build_benchmark_nav(benchmark_prices, config.initial_capital)
-    metrics = _compute_metrics(nav, bench_nav)
+    metrics = _compute_metrics(nav, bench_nav, rf_annual)
 
     return BacktestResult(
         nav_series=nav,
@@ -354,7 +359,7 @@ def _run_momentum(config, prices, benchmark_prices):
 # Strategy 3: Moving Average Crossover (50/200)
 # ═══════════════════════════════════════════════════════════
 
-def _run_ma_crossover(config, prices, benchmark_prices):
+def _run_ma_crossover(config, prices, benchmark_prices, rf_annual=0.043):
     ma_short = config.ma_short
     ma_long = config.ma_long
     rebal_dates = _get_rebalance_dates(prices.index, config.rebalance_freq)
@@ -393,7 +398,7 @@ def _run_ma_crossover(config, prices, benchmark_prices):
     nav, trades, weights_hist = _compute_nav(prices, weights_map,
                                               config.initial_capital, config.transaction_cost)
     bench_nav = _build_benchmark_nav(benchmark_prices, config.initial_capital)
-    metrics = _compute_metrics(nav, bench_nav)
+    metrics = _compute_metrics(nav, bench_nav, rf_annual)
 
     return BacktestResult(
         nav_series=nav,
@@ -409,7 +414,7 @@ def _run_ma_crossover(config, prices, benchmark_prices):
 # Strategy 4: Screener Grade (current grades → past returns)
 # ═══════════════════════════════════════════════════════════
 
-def _run_screener_grade(config, prices, benchmark_prices):
+def _run_screener_grade(config, prices, benchmark_prices, rf_annual=0.043):
     """
     Uses current screener grades to select top N stocks,
     then backtests as if those stocks were bought at start of period.
@@ -434,7 +439,7 @@ def _run_screener_grade(config, prices, benchmark_prices):
     nav, trades, weights_hist = _compute_nav(prices, weights_map,
                                               config.initial_capital, config.transaction_cost)
     bench_nav = _build_benchmark_nav(benchmark_prices, config.initial_capital)
-    metrics = _compute_metrics(nav, bench_nav)
+    metrics = _compute_metrics(nav, bench_nav, rf_annual)
 
     return BacktestResult(
         nav_series=nav,

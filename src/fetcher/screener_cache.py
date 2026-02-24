@@ -91,7 +91,7 @@ def _save_universe_cache(path: str, data: List[Dict]):
 
 
 def _fetch_from_wikipedia(name: str) -> List[Dict[str, str]]:
-    """Fetch ticker list from Wikipedia."""
+    """Fetch ticker list from Wikipedia or KRX sources."""
     try:
         if name == "sp500":
             return _fetch_sp500_wikipedia()
@@ -107,6 +107,10 @@ def _fetch_from_wikipedia(name: str) -> List[Dict[str, str]]:
                     sp500.append(t)
                     seen.add(t["ticker"])
             return sp500
+        elif name == "kospi200":
+            return _fetch_kospi200()
+        elif name == "kosdaq150":
+            return _fetch_kosdaq150()
         return []
     except Exception:
         return []
@@ -156,6 +160,59 @@ def _fetch_nasdaq100_wikipedia() -> List[Dict[str, str]]:
             if len(tickers) >= 50:
                 return tickers
     return []
+
+
+def _fetch_kospi200() -> List[Dict[str, str]]:
+    """Fetch KOSPI 200 constituents from Wikipedia (Korean)."""
+    url = "https://en.wikipedia.org/wiki/KOSPI_200"
+    try:
+        resp = requests.get(url, headers=_WIKI_HEADERS, timeout=30, verify=False)
+        resp.raise_for_status()
+        tables = pd.read_html(StringIO(resp.text), flavor="lxml")
+        for table in tables:
+            cols = [str(c).lower() for c in table.columns]
+            if any(k in " ".join(cols) for k in ["code", "ticker", "symbol", "종목코드"]):
+                tickers = []
+                # Try to find the code/ticker column
+                code_col = None
+                name_col = None
+                for c in table.columns:
+                    cl = str(c).lower()
+                    if cl in ("code", "ticker", "symbol", "종목코드"):
+                        code_col = c
+                    elif cl in ("company", "name", "종목명", "기업명"):
+                        name_col = c
+                if code_col is None:
+                    continue
+                if name_col is None:
+                    name_col = table.columns[0] if table.columns[0] != code_col else table.columns[1]
+                for _, row in table.iterrows():
+                    code = str(row.get(code_col, "")).strip()
+                    # Pad to 6 digits if numeric
+                    if code.isdigit():
+                        code = code.zfill(6)
+                        ticker = f"{code}.KS"
+                    elif code.endswith(".KS") or code.endswith(".KQ"):
+                        ticker = code
+                    else:
+                        continue
+                    tickers.append({
+                        "ticker": ticker,
+                        "name": str(row.get(name_col, "")),
+                        "sector": "",
+                        "industry": "",
+                    })
+                if len(tickers) >= 50:
+                    return tickers
+    except Exception:
+        pass
+    return _get_fallback_tickers("kospi200")
+
+
+def _fetch_kosdaq150() -> List[Dict[str, str]]:
+    """Fetch KOSDAQ 150 constituents — fallback to hardcoded list."""
+    # KOSDAQ 150 has no reliable Wikipedia page; use fallback
+    return _get_fallback_tickers("kosdaq150")
 
 
 def _get_fallback_tickers(name: str) -> List[Dict[str, str]]:
@@ -251,6 +308,62 @@ def _get_fallback_tickers(name: str) -> List[Dict[str, str]]:
             "PEP", "COST", "NFLX", "QCOM", "TXN", "HON",
         }
         return [t for t in fallback if t["ticker"] in nasdaq_tickers]
+
+    # ── Korean market fallbacks ──
+    kr_kospi = [
+        {"ticker": "005930.KS", "name": "삼성전자", "sector": "Information Technology", "industry": "Semiconductors"},
+        {"ticker": "000660.KS", "name": "SK하이닉스", "sector": "Information Technology", "industry": "Semiconductors"},
+        {"ticker": "373220.KS", "name": "LG에너지솔루션", "sector": "Industrials", "industry": "Electrical Equipment"},
+        {"ticker": "207940.KS", "name": "삼성바이오로직스", "sector": "Health Care", "industry": "Biotechnology"},
+        {"ticker": "005380.KS", "name": "현대자동차", "sector": "Consumer Discretionary", "industry": "Auto Manufacturers"},
+        {"ticker": "006400.KS", "name": "삼성SDI", "sector": "Information Technology", "industry": "Electrical Equipment"},
+        {"ticker": "051910.KS", "name": "LG화학", "sector": "Materials", "industry": "Specialty Chemicals"},
+        {"ticker": "035420.KS", "name": "NAVER", "sector": "Communication Services", "industry": "Internet Content"},
+        {"ticker": "000270.KS", "name": "기아", "sector": "Consumer Discretionary", "industry": "Auto Manufacturers"},
+        {"ticker": "068270.KS", "name": "셀트리온", "sector": "Health Care", "industry": "Biotechnology"},
+        {"ticker": "105560.KS", "name": "KB금융", "sector": "Financials", "industry": "Banks"},
+        {"ticker": "055550.KS", "name": "신한지주", "sector": "Financials", "industry": "Banks"},
+        {"ticker": "035720.KS", "name": "카카오", "sector": "Communication Services", "industry": "Internet Content"},
+        {"ticker": "003670.KS", "name": "포스코퓨처엠", "sector": "Materials", "industry": "Steel"},
+        {"ticker": "028260.KS", "name": "삼성물산", "sector": "Industrials", "industry": "Conglomerates"},
+        {"ticker": "012330.KS", "name": "현대모비스", "sector": "Consumer Discretionary", "industry": "Auto Parts"},
+        {"ticker": "066570.KS", "name": "LG전자", "sector": "Consumer Discretionary", "industry": "Consumer Electronics"},
+        {"ticker": "096770.KS", "name": "SK이노베이션", "sector": "Energy", "industry": "Oil & Gas Refining"},
+        {"ticker": "034730.KS", "name": "SK", "sector": "Industrials", "industry": "Conglomerates"},
+        {"ticker": "003550.KS", "name": "LG", "sector": "Industrials", "industry": "Conglomerates"},
+        {"ticker": "032830.KS", "name": "삼성생명", "sector": "Financials", "industry": "Insurance"},
+        {"ticker": "015760.KS", "name": "한국전력", "sector": "Utilities", "industry": "Utilities"},
+        {"ticker": "009150.KS", "name": "삼성전기", "sector": "Information Technology", "industry": "Electronic Components"},
+        {"ticker": "086790.KS", "name": "하나금융지주", "sector": "Financials", "industry": "Banks"},
+        {"ticker": "010130.KS", "name": "고려아연", "sector": "Materials", "industry": "Metals & Mining"},
+        {"ticker": "017670.KS", "name": "SK텔레콤", "sector": "Communication Services", "industry": "Telecom"},
+        {"ticker": "030200.KS", "name": "KT", "sector": "Communication Services", "industry": "Telecom"},
+        {"ticker": "018260.KS", "name": "삼성에스디에스", "sector": "Information Technology", "industry": "IT Services"},
+        {"ticker": "011170.KS", "name": "롯데케미칼", "sector": "Materials", "industry": "Specialty Chemicals"},
+        {"ticker": "033780.KS", "name": "KT&G", "sector": "Consumer Staples", "industry": "Tobacco"},
+    ]
+    kr_kosdaq = [
+        {"ticker": "247540.KQ", "name": "에코프로비엠", "sector": "Materials", "industry": "Specialty Chemicals"},
+        {"ticker": "091990.KQ", "name": "셀트리온헬스케어", "sector": "Health Care", "industry": "Biotechnology"},
+        {"ticker": "263750.KQ", "name": "펄어비스", "sector": "Communication Services", "industry": "Electronic Gaming"},
+        {"ticker": "086520.KQ", "name": "에코프로", "sector": "Materials", "industry": "Specialty Chemicals"},
+        {"ticker": "196170.KQ", "name": "알테오젠", "sector": "Health Care", "industry": "Biotechnology"},
+        {"ticker": "403870.KQ", "name": "HPSP", "sector": "Information Technology", "industry": "Semiconductors"},
+        {"ticker": "145020.KQ", "name": "휴젤", "sector": "Health Care", "industry": "Biotechnology"},
+        {"ticker": "357780.KQ", "name": "솔브레인", "sector": "Materials", "industry": "Specialty Chemicals"},
+        {"ticker": "058470.KQ", "name": "리노공업", "sector": "Information Technology", "industry": "Semiconductors"},
+        {"ticker": "112040.KQ", "name": "위메이드", "sector": "Communication Services", "industry": "Electronic Gaming"},
+        {"ticker": "383220.KQ", "name": "F&F", "sector": "Consumer Discretionary", "industry": "Apparel"},
+        {"ticker": "293490.KQ", "name": "카카오게임즈", "sector": "Communication Services", "industry": "Electronic Gaming"},
+        {"ticker": "041510.KQ", "name": "에스엠", "sector": "Communication Services", "industry": "Entertainment"},
+        {"ticker": "035900.KQ", "name": "JYP Ent.", "sector": "Communication Services", "industry": "Entertainment"},
+        {"ticker": "352820.KQ", "name": "하이브", "sector": "Communication Services", "industry": "Entertainment"},
+    ]
+
+    if name == "kospi200":
+        return kr_kospi
+    if name == "kosdaq150":
+        return kr_kosdaq
 
     return fallback
 

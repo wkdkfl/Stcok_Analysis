@@ -11,7 +11,7 @@ import streamlit as st
 import sys, os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-from config import SECTOR_ETFS, CACHE_TTL
+from config import SECTOR_ETFS, KR_SECTOR_ETFS, CACHE_TTL
 from src.fetcher.ssl_session import get_session
 
 _session = get_session()
@@ -25,7 +25,7 @@ def compute_macro_regime(macro_data: Dict[str, Any], stock_data: Dict[str, Any])
         "yield_curve": _analyze_yield_curve(macro_data),
         "credit": _analyze_credit(macro_data),
         "vix": _analyze_vix(macro_data),
-        "sector_rotation": _analyze_sector_rotation(stock_data.get("sector", "")),
+        "sector_rotation": _analyze_sector_rotation(stock_data.get("sector", ""), stock_data.get("market", "US")),
         "erp": _analyze_erp(macro_data),
         "summary": "",
         "implication": "",
@@ -102,7 +102,7 @@ def _analyze_erp(macro: Dict) -> Dict:
 
 
 @st.cache_data(ttl=CACHE_TTL, show_spinner=False)
-def _analyze_sector_rotation(stock_sector: str) -> Dict:
+def _analyze_sector_rotation(stock_sector: str, market: str = "US") -> Dict:
     """Analyze sector relative strength to determine business cycle phase."""
     result = {
         "cycle_phase": None,
@@ -112,9 +112,12 @@ def _analyze_sector_rotation(stock_sector: str) -> Dict:
     }
 
     try:
+        # Choose sector ETFs based on market
+        sector_etfs = KR_SECTOR_ETFS if market == "KR" else SECTOR_ETFS
+
         # Download 3-month returns for sector ETFs
         returns = {}
-        for sector_name, etf in SECTOR_ETFS.items():
+        for sector_name, etf in sector_etfs.items():
             try:
                 t = yf.Ticker(etf, session=_session)
                 h = t.history(period="3mo")

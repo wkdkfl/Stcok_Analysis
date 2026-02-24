@@ -11,6 +11,7 @@ import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import DCF_DEFAULTS
 from src.fetcher.yahoo import get_stmt_series
+from src.market_context import get_dcf_overrides
 
 
 def compute_epv(data: Dict[str, Any], overrides: Optional[Dict] = None) -> Dict[str, Any]:
@@ -18,7 +19,8 @@ def compute_epv(data: Dict[str, Any], overrides: Optional[Dict] = None) -> Dict[
     Compute Earnings Power Value.
     EPV = Normalized EBIT × (1 - tax) / WACC
     """
-    cfg = {**DCF_DEFAULTS, **(overrides or {})}
+    market = data.get("market", "US")
+    cfg = {**DCF_DEFAULTS, **get_dcf_overrides(market), **(overrides or {})}
     result = {
         "model": "Earnings Power Value (Greenwald)",
         "fair_value": None,

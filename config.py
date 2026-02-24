@@ -72,6 +72,35 @@ SECTOR_ETFS = {
     "Basic Materials": "XLB",
 }
 
+# ── 한국 섹터 ETF 매핑 (KODEX 기반) ─────────────────────────
+KR_SECTOR_ETFS = {
+    "Technology": "091160.KS",         # KODEX 반도체
+    "Healthcare": "266420.KS",         # KODEX 헬스케어
+    "Financial Services": "091170.KS", # KODEX 은행
+    "Consumer Cyclical": "266360.KS",  # KODEX 경기소비재
+    "Consumer Defensive": "266390.KS", # KODEX 필수소비재
+    "Industrials": "102780.KS",        # KODEX 삼성그룹
+    "Energy": "117460.KS",             # KODEX 에너지화학
+    "Communication Services": "091180.KS",  # KODEX IT
+    "Utilities": "117680.KS",          # KODEX 철강
+    "Basic Materials": "117680.KS",    # KODEX 철강
+}
+
+# ── 한국 섹터별 평균 배수 (Fallback) ─────────────────────────
+KR_SECTOR_MULTIPLES_FALLBACK = {
+    "Technology":        {"ev_ebitda": 12.0, "pe": 18.0, "ps": 3.0},
+    "Healthcare":        {"ev_ebitda": 20.0, "pe": 30.0, "ps": 5.0},
+    "Financial Services":{"ev_ebitda": 8.0,  "pe": 7.0,  "ps": 1.5},
+    "Consumer Cyclical":  {"ev_ebitda": 10.0, "pe": 15.0, "ps": 1.0},
+    "Consumer Defensive": {"ev_ebitda": 10.0, "pe": 15.0, "ps": 1.0},
+    "Industrials":       {"ev_ebitda": 8.0,  "pe": 12.0, "ps": 0.8},
+    "Energy":            {"ev_ebitda": 5.0,  "pe": 8.0,  "ps": 0.5},
+    "Real Estate":       {"ev_ebitda": 15.0, "pe": 20.0, "ps": 3.0},
+    "Communication Services": {"ev_ebitda": 8.0, "pe": 12.0, "ps": 1.5},
+    "Utilities":         {"ev_ebitda": 8.0,  "pe": 12.0, "ps": 1.0},
+    "Basic Materials":   {"ev_ebitda": 6.0,  "pe": 10.0, "ps": 0.8},
+}
+
 # ── Fama-French 팩터 URL ─────────────────────────────────────
 FF_FACTORS_URL = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_5_Factors_2x3_daily_CSV.zip"
 FF_MOMENTUM_URL = "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Momentum_Factor_daily_CSV.zip"
@@ -122,6 +151,8 @@ SCREENER_UNIVERSES = {
     "S&P 500": "sp500",
     "NASDAQ 100": "nasdaq100",
     "S&P 500 + NASDAQ 100": "sp500_nasdaq100",
+    "KOSPI 200": "kospi200",
+    "KOSDAQ 150": "kosdaq150",
 }
 SCREENER_CACHE_TTL = 86400  # 24h
 
@@ -136,6 +167,9 @@ BENCHMARKS = {
     "NASDAQ 100 (QQQ)": "QQQ",
     "Dow Jones (DIA)": "DIA",
     "Russell 2000 (IWM)": "IWM",
+    "KOSPI": "^KS11",
+    "KOSDAQ": "^KQ11",
+    "KODEX 200": "069500.KS",
 }
 
 BACKTEST_DEFAULTS = {

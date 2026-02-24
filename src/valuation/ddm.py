@@ -9,6 +9,7 @@ import sys, os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import DCF_DEFAULTS
+from src.market_context import get_dcf_overrides
 
 
 def compute_ddm(data: Dict[str, Any], overrides: Optional[Dict] = None) -> Dict[str, Any]:
@@ -17,7 +18,8 @@ def compute_ddm(data: Dict[str, Any], overrides: Optional[Dict] = None) -> Dict[
     Gordon: P = D1 / (r - g)
     Multi-stage: high growth → terminal growth
     """
-    cfg = {**DCF_DEFAULTS, **(overrides or {})}
+    market = data.get("market", "US")
+    cfg = {**DCF_DEFAULTS, **get_dcf_overrides(market), **(overrides or {})}
     result = {
         "model": "Dividend Discount Model",
         "fair_value": None,

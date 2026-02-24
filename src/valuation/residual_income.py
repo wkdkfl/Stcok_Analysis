@@ -10,6 +10,7 @@ import sys, os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import DCF_DEFAULTS
+from src.market_context import get_dcf_overrides
 
 
 def compute_residual_income(data: Dict[str, Any], overrides: Optional[Dict] = None) -> Dict[str, Any]:
@@ -17,7 +18,8 @@ def compute_residual_income(data: Dict[str, Any], overrides: Optional[Dict] = No
     Compute intrinsic value using Residual Income Model.
     V = BPS + Σ[(ROE_t - r_e) × BPS_{t-1}] / (1+r_e)^t
     """
-    cfg = {**DCF_DEFAULTS, **(overrides or {})}
+    market = data.get("market", "US")
+    cfg = {**DCF_DEFAULTS, **get_dcf_overrides(market), **(overrides or {})}
     result = {
         "model": "Residual Income (EBO)",
         "fair_value": None,

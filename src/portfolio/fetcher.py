@@ -18,6 +18,9 @@ BENCHMARKS = {
     "NASDAQ 100 (QQQ)": "QQQ",
     "Dow Jones (DIA)": "DIA",
     "Russell 2000 (IWM)": "IWM",
+    "KOSPI (^KS11)": "^KS11",
+    "KOSDAQ (^KQ11)": "^KQ11",
+    "KODEX 200 (069500)": "069500.KS",
 }
 
 

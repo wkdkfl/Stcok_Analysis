@@ -9,6 +9,11 @@ import pandas as pd
 import plotly.graph_objects as go
 from typing import Dict, Any, List, Optional
 
+from src.market_context import (
+    get_currency_symbol, get_chart_price_label, get_chart_value_label,
+    format_chart_tick, get_chart_nav_label,
+)
+
 
 # ── Color Palette ────────────────────────────────────────
 COLORS = {
@@ -39,7 +44,7 @@ def style_fig(fig, ax):
 # FINANCIALS CHARTS
 # ═══════════════════════════════════════════════════════════
 
-def chart_revenue_profit(data: Dict[str, Any]) -> Optional[plt.Figure]:
+def chart_revenue_profit(data: Dict[str, Any], currency: str = "USD") -> Optional[plt.Figure]:
     """Revenue & Operating Income 5-year bar chart."""
     from src.fetcher.yahoo import get_stmt_series
 
@@ -60,21 +65,31 @@ def chart_revenue_profit(data: Dict[str, Any]) -> Optional[plt.Figure]:
     x = np.arange(len(years))
     w = 0.35
 
-    rev_vals = rev_s.values / 1e9
+    _sym = get_currency_symbol(currency)
+    if currency == "KRW":
+        _divisor = 1e12
+        _unit_label = "조원"
+        _tick_fmt = lambda x, _: f"{x:.1f}조"
+    else:
+        _divisor = 1e9
+        _unit_label = f"Billions ({_sym})"
+        _tick_fmt = lambda x, _: f"{_sym}{x:.1f}B"
+
+    rev_vals = rev_s.values / _divisor
     ax1.bar(x - w / 2, rev_vals, w, label="Revenue", color=COLORS["revenue"], alpha=0.8)
 
     if ebit_s is not None and len(ebit_s) == len(rev_s):
-        ebit_vals = ebit_s.values / 1e9
+        ebit_vals = ebit_s.values / _divisor
         colors = [COLORS["profit"] if v >= 0 else COLORS["loss"] for v in ebit_vals]
         ax1.bar(x + w / 2, ebit_vals, w, label="Operating Income", color=colors, alpha=0.8)
 
     ax1.set_xlabel("")
-    ax1.set_ylabel("Billions ($)")
+    ax1.set_ylabel(_unit_label)
     ax1.set_title("Revenue & Operating Income", fontsize=12, fontweight="bold")
     ax1.set_xticks(x)
     ax1.set_xticklabels(years)
     ax1.legend(loc="upper left", fontsize=8)
-    ax1.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"${x:.1f}B"))
+    ax1.yaxis.set_major_formatter(mticker.FuncFormatter(_tick_fmt))
     fig.tight_layout()
     return fig
 
@@ -131,7 +146,8 @@ def chart_margins(data: Dict[str, Any]) -> Optional[plt.Figure]:
 # ═══════════════════════════════════════════════════════════
 
 def chart_valuation_comparison(valuation_results: Dict[str, Any],
-                                current_price: float) -> Optional[plt.Figure]:
+                                current_price: float,
+                                currency: str = "USD") -> Optional[plt.Figure]:
     """Horizontal bar chart — 7 model fair values vs current price."""
     summary = valuation_results.get("models_summary", [])
     if not summary:
@@ -156,24 +172,26 @@ def chart_valuation_comparison(valuation_results: Dict[str, Any],
 
     y = np.arange(len(models))
     ax.barh(y, values, color=colors, alpha=0.8, height=0.5)
+    _sym = get_currency_symbol(currency)
     ax.axvline(x=current_price, color=COLORS["current_price"], linestyle="--",
-               linewidth=2, label=f"Current: ${current_price:.2f}")
+               linewidth=2, label=f"Current: {_sym}{current_price:,.0f}")
 
     ax.set_yticks(y)
     ax.set_yticklabels(models, fontsize=9)
-    ax.set_xlabel("Fair Value ($)")
+    ax.set_xlabel(f"Fair Value ({_sym})")
     ax.set_title("Valuation Model Comparison", fontsize=12, fontweight="bold")
     ax.legend(fontsize=9)
 
     for i, v in enumerate(values):
-        ax.text(v + current_price * 0.02, i, f"${v:.0f}", va="center", fontsize=8)
+        ax.text(v + current_price * 0.02, i, f"{_sym}{v:,.0f}", va="center", fontsize=8)
 
     fig.tight_layout()
     return fig
 
 
 def chart_monte_carlo(mc_distribution: np.ndarray,
-                      current_price: float, fair_value: float) -> Optional[plt.Figure]:
+                      current_price: float, fair_value: float,
+                      currency: str = "USD") -> Optional[plt.Figure]:
     """Monte Carlo DCF distribution histogram."""
     if mc_distribution is None or len(mc_distribution) == 0:
         return None
@@ -181,17 +199,18 @@ def chart_monte_carlo(mc_distribution: np.ndarray,
     fig, ax = plt.subplots(figsize=(8, 4))
     style_fig(fig, ax)
 
+    _sym = get_currency_symbol(currency)
     ax.hist(mc_distribution, bins=80, color=COLORS["primary"], alpha=0.7, edgecolor="white")
     ax.axvline(current_price, color=COLORS["current_price"], linestyle="--",
-               linewidth=2, label=f"Current: ${current_price:.0f}")
+               linewidth=2, label=f"Current: {_sym}{current_price:,.0f}")
     ax.axvline(fair_value, color=COLORS["green"], linestyle="-",
-               linewidth=2, label=f"Fair Value: ${fair_value:.0f}")
+               linewidth=2, label=f"Fair Value: {_sym}{fair_value:,.0f}")
 
     p10 = np.percentile(mc_distribution, 10)
     p90 = np.percentile(mc_distribution, 90)
-    ax.axvspan(p10, p90, alpha=0.1, color="green", label=f"10th-90th: ${p10:.0f}-${p90:.0f}")
+    ax.axvspan(p10, p90, alpha=0.1, color="green", label=f"10th-90th: {_sym}{p10:,.0f}-{_sym}{p90:,.0f}")
 
-    ax.set_xlabel("Intrinsic Value ($)")
+    ax.set_xlabel(f"Intrinsic Value ({_sym})")
     ax.set_ylabel("Frequency")
     ax.set_title("DCF Monte Carlo Simulation (10,000 runs)", fontsize=12, fontweight="bold")
     ax.legend(fontsize=8)
@@ -339,7 +358,7 @@ def chart_price_with_ma(data: Dict[str, Any]) -> Optional[plt.Figure]:
     ax.fill_between(upper.index, upper.values, lower.values,
                     alpha=0.08, color=COLORS["primary"])
 
-    ax.set_ylabel("Price ($)")
+    ax.set_ylabel(get_chart_price_label(data.get("currency", "USD")))
     ax.set_title(f"{data.get('ticker', '')} — Price & Moving Averages", fontsize=12, fontweight="bold")
     ax.legend(fontsize=8, loc="upper left")
     fig.tight_layout()
@@ -442,6 +461,7 @@ def chart_portfolio_equity_curve(
     nav: "pd.Series",
     benchmark_nav: "pd.Series" = None,
     title: str = "포트폴리오 수익률 곡선",
+    currency: str = "USD",
 ) -> go.Figure:
     """Equity-curve line chart — portfolio NAV vs benchmark."""
     fig = go.Figure()
@@ -459,7 +479,7 @@ def chart_portfolio_equity_curve(
     fig.update_layout(
         title=title,
         xaxis_title="Date",
-        yaxis_title="NAV ($)",
+        yaxis_title=get_chart_nav_label(currency),
         hovermode="x unified",
         height=420,
         margin=dict(l=50, r=20, t=50, b=40),
@@ -571,6 +591,7 @@ def chart_rolling_sharpe(
 def chart_backtest_trades(
     trades_log: list,
     title: str = "리밸런싱 이력",
+    currency: str = "USD",
 ) -> go.Figure:
     """Bar chart showing portfolio value at each rebalance point + transaction costs."""
     if not trades_log:
@@ -600,8 +621,8 @@ def chart_backtest_trades(
     fig.update_layout(
         title=title,
         xaxis_title="리밸런싱 일자",
-        yaxis=dict(title="포트폴리오 가치 ($)"),
-        yaxis2=dict(title="거래 비용 ($)", overlaying="y", side="right"),
+        yaxis=dict(title=f"포트폴리오 가치 ({get_currency_symbol(currency)})"),
+        yaxis2=dict(title=f"거래 비용 ({get_currency_symbol(currency)})", overlaying="y", side="right"),
         barmode="group",
         height=380,
         margin=dict(l=60, r=60, t=50, b=40),

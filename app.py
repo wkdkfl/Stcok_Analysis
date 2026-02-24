@@ -20,6 +20,11 @@ from config import (
     OPENAI_API_KEY, ANTHROPIC_API_KEY, AI_REPORT_DEFAULTS,
 )
 from src.i18n import t, get_language
+from src.market_context import (
+    format_price, format_market_cap, format_money,
+    get_stmt_unit_label, get_currency_symbol, get_fair_value_col_header,
+    detect_market,
+)
 
 # ── Page Config ──────────────────────────────────────────
 st.set_page_config(
@@ -427,19 +432,25 @@ def run_analysis(ticker: str, dcf_overrides: dict):
             "sector_metrics": lambda: detect_and_compute_sector_metrics(stock_data),
         }
 
-        # Guru fetch (SEC 13F)
-        def _fetch_guru():
-            try:
-                from src.fetcher.sec_edgar import fetch_guru_holdings_for_ticker
-                return fetch_guru_holdings_for_ticker(ticker)
-            except Exception:
-                return {"guru_holders": [], "guru_count": 0, "total_guru_value": 0}
-        tasks["guru"] = _fetch_guru
+        # Guru fetch (SEC 13F) — only for US stocks
+        _market = stock_data.get("market", detect_market(ticker))
+        if _market != "KR":
+            def _fetch_guru():
+                try:
+                    from src.fetcher.sec_edgar import fetch_guru_holdings_for_ticker
+                    return fetch_guru_holdings_for_ticker(ticker)
+                except Exception:
+                    return {"guru_holders": [], "guru_count": 0, "total_guru_value": 0}
+            tasks["guru"] = _fetch_guru
+        else:
+            results["guru"] = {"guru_holders": [], "guru_count": 0, "total_guru_value": 0,
+                               "_kr_notice": "한국 시장은 SEC 13F 공시 대상이 아닙니다."}
 
         # Macro (optional)
         if show_macro:
             def _fetch_macro():
-                macro = fetch_macro_data()
+                _mkt = stock_data.get("market", "US")
+                macro = fetch_macro_data(market=_mkt)
                 return compute_macro_regime(macro, stock_data)
             tasks["macro"] = _fetch_macro
 
@@ -503,6 +514,7 @@ def display_single_ticker(results: dict):
     """Display full analysis for a single ticker."""
     data = results["data"]
     valuation = results["valuation"]
+    _cur = data.get("currency", "USD")
 
     # ── Header ───────────────────────────────────────────
     col1, col2, col3 = st.columns([3, 1, 1])
@@ -511,11 +523,11 @@ def display_single_ticker(results: dict):
         st.caption(f"{data['sector']} · {data['industry']} · {data['country']}")
     with col2:
         price = data.get("current_price", 0)
-        st.metric("Current Price", f"${price:,.2f}")
+        st.metric("Current Price", format_price(price, _cur))
     with col3:
         mc = data.get("market_cap")
         if mc:
-            st.metric("Market Cap", f"${mc/1e9:,.1f}B")
+            st.metric("Market Cap", format_market_cap(mc, _cur))
 
     # ── Signal Banner ────────────────────────────────────
     grades = results.get("grades", {})
@@ -540,11 +552,12 @@ def display_single_ticker(results: dict):
                   help=tip("grade.overall"))
     with col3:
         if fair_value:
-            st.metric("Fair Value (종합)", f"${fair_value:,.2f}",
+            st.metric("Fair Value (종합)", format_price(fair_value, _cur),
                       delta=f"{upside:+.1f}%" if upside else None)
     with col4:
         if fv_range:
-            st.metric("Fair Value Range", f"${fv_range[0]:,.0f} - ${fv_range[1]:,.0f}")
+            st.metric("Fair Value Range",
+                      f"{format_price(fv_range[0], _cur)} - {format_price(fv_range[1], _cur)}")
 
     # ── Category Grade Cards (7 cards in a row) ──────────
     from src.grading.category_grades import CATEGORY_LABELS
@@ -762,6 +775,7 @@ def _render_valuation_tab(results: dict):
     valuation = results["valuation"]
     data = results["data"]
     current_price = data.get("current_price", 0)
+    _cur = data.get("currency", "USD")
 
     # Summary table
     st.subheader(t("val.comparison"))
@@ -773,13 +787,13 @@ def _render_valuation_tab(results: dict):
     summary = valuation.get("models_summary", [])
     if summary:
         df = pd.DataFrame(summary)
-        df.columns = ["Model", "Fair Value ($)", "Upside (%)", "Confidence"]
+        df.columns = ["Model", get_fair_value_col_header(_cur), "Upside (%)", "Confidence"]
         st.dataframe(df, use_container_width=True, hide_index=True)
 
     # Charts side by side
     col1, col2 = st.columns(2)
     with col1:
-        fig = chart_valuation_comparison(valuation, current_price)
+        fig = chart_valuation_comparison(valuation, current_price, _cur)
         if fig:
             st.pyplot(fig)
 
@@ -788,7 +802,7 @@ def _render_valuation_tab(results: dict):
         mc_dist = dcf_result.get("mc_distribution")
         fv = dcf_result.get("fair_value") or valuation.get("fair_value") or 0
         if mc_dist is not None and len(mc_dist) > 0:
-            fig_mc = chart_monte_carlo(mc_dist, current_price, fv)
+            fig_mc = chart_monte_carlo(mc_dist, current_price, fv, _cur)
             if fig_mc:
                 st.pyplot(fig_mc)
 
@@ -818,10 +832,10 @@ def _render_valuation_tab(results: dict):
         if dcf_result.get("mc_p10"):
             st.markdown("**Monte Carlo Summary**")
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("10th Percentile", f"${dcf_result['mc_p10']:,.0f}")
-            c2.metric("Median", f"${dcf_result.get('mc_median', 0):,.0f}")
-            c3.metric("Mean", f"${dcf_result.get('mc_mean', 0):,.0f}")
-            c4.metric("90th Percentile", f"${dcf_result['mc_p90']:,.0f}")
+            c1.metric("10th Percentile", format_price(dcf_result['mc_p10'], _cur))
+            c2.metric("Median", format_price(dcf_result.get('mc_median', 0), _cur))
+            c3.metric("Mean", format_price(dcf_result.get('mc_mean', 0), _cur))
+            c4.metric("90th Percentile", format_price(dcf_result['mc_p90'], _cur))
 
 
 def _render_quality_tab(results: dict):
@@ -903,11 +917,14 @@ def _render_financials_tab(results: dict):
     from src.charts.all_charts import chart_revenue_profit, chart_margins
 
     data = results["data"]
+    _cur = data.get("currency", "USD")
+    _stmt_unit = get_stmt_unit_label(_cur)
+    _divisor = 1e8 if _cur == "KRW" else 1e6
 
     # Charts
     col1, col2 = st.columns(2)
     with col1:
-        fig = chart_revenue_profit(data)
+        fig = chart_revenue_profit(data, _cur)
         if fig:
             st.pyplot(fig)
     with col2:
@@ -921,24 +938,24 @@ def _render_financials_tab(results: dict):
     with sub_tabs[0]:
         inc = data.get("income_stmt")
         if inc is not None and not inc.empty:
-            st.dataframe((inc / 1e6).round(1), use_container_width=True)
-            st.caption("($ millions)")
+            st.dataframe((inc / _divisor).round(1), use_container_width=True)
+            st.caption(_stmt_unit)
         else:
             st.caption("데이터 없음")
 
     with sub_tabs[1]:
         bs = data.get("balance_sheet")
         if bs is not None and not bs.empty:
-            st.dataframe((bs / 1e6).round(1), use_container_width=True)
-            st.caption("($ millions)")
+            st.dataframe((bs / _divisor).round(1), use_container_width=True)
+            st.caption(_stmt_unit)
         else:
             st.caption("데이터 없음")
 
     with sub_tabs[2]:
         cf = data.get("cashflow")
         if cf is not None and not cf.empty:
-            st.dataframe((cf / 1e6).round(1), use_container_width=True)
-            st.caption("($ millions)")
+            st.dataframe((cf / _divisor).round(1), use_container_width=True)
+            st.caption(_stmt_unit)
         else:
             st.caption("데이터 없음")
 
@@ -981,7 +998,10 @@ def _render_smart_money_tab(results: dict):
     st.markdown("")
 
     # Guru summary (brief) + link to dedicated tab
-    if guru_count > 0:
+    kr_notice = guru.get("_kr_notice")
+    if kr_notice:
+        st.caption(f"ℹ️ {kr_notice}")
+    elif guru_count > 0:
         st.info(
             f"🏆 {guru_count}명의 유명 투자자가 이 종목을 보유 중입니다. "
             f"상세 내역은 **🏦 13F 구루** 탭에서 확인하세요."
@@ -1224,12 +1244,13 @@ def display_comparison(all_results: list):
         v = r["valuation"]
         g = r.get("grades", {})
         cats = g.get("categories", {})
+        _cur_c = d.get("currency", "USD")
         row = {
             "Ticker": d["ticker"],
-            "Price": f"${d.get('current_price', 0):,.2f}",
+            "Price": format_price(d.get('current_price', 0), _cur_c),
             "Signal": g.get("signal", v.get("signal", "N/A")),
             "Overall": g.get("overall_grade", "N/A"),
-            "Fair Value": f"${v.get('fair_value', 0):,.2f}" if v.get("fair_value") else "N/A",
+            "Fair Value": format_price(v.get('fair_value', 0), _cur_c) if v.get("fair_value") else "N/A",
             "Upside": f"{v.get('upside_pct', 0):+.1f}%" if v.get("upside_pct") is not None else "N/A",
             "Valuation": cats.get("valuation", {}).get("grade", "-"),
             "Quality": cats.get("quality", {}).get("grade", "-"),
@@ -1321,9 +1342,7 @@ def _render_guru_top5_section():
                 name = name[:16] + "…"
 
             val = item.get("total_value", 0)
-            val_str = (f"${val/1e9:,.1f}B" if val >= 1e9
-                       else f"${val/1e6:,.0f}M" if val >= 1e6
-                       else f"${val:,.0f}")
+            val_str = format_money(val)
 
             with col:
                 st.markdown(
@@ -1353,7 +1372,7 @@ def _render_guru_top5_section():
                     "종목명": (item.get("info") or {}).get("name", item.get("name", "")),
                     "구루 수": item["guru_count"],
                     "보유 구루": gurus_str,
-                    "합산 금액": f"${item.get('total_value', 0):,.0f}",
+                    "합산 금액": format_money(item.get('total_value', 0)),
                     "Overall Grade": g.get("overall_grade", "N/A"),
                     "Score": f"{g.get('overall_score', 0):.0f}",
                 })
@@ -1397,9 +1416,7 @@ def display_guru_tab():
                     c1.metric("보고 기준일", portfolio["report_date"])
                     c2.metric("제출일", portfolio["filing_date"])
                     c3.metric("총 포트폴리오",
-                              f"${portfolio['total_value']/1e9:,.1f}B"
-                              if portfolio['total_value'] >= 1e9
-                              else f"${portfolio['total_value']/1e6:,.0f}M")
+                              format_money(portfolio['total_value']))
                     c4.metric("총 보유 종목", f"{portfolio['holdings_count']}개")
 
                     st.markdown("---")
@@ -1413,7 +1430,7 @@ def display_guru_tab():
                             "종목": h["name"],
                             "티커": h.get("ticker", "—"),
                             "주식수": f"{h['shares']:,}",
-                            "금액": f"${h['value_usd']:,.0f}",
+                            "금액": format_money(h['value_usd']),
                             "비중": f"{h['pct_of_portfolio']:.2f}%",
                         })
                     df_port = pd.DataFrame(port_rows)
@@ -1468,7 +1485,7 @@ def display_guru_tab():
                     guru_rows.append({
                         "투자자": g["investor"],
                         "보유 주식수": f"{g['shares']:,}",
-                        "보유 금액": f"${g['value_usd']:,.0f}",
+                        "보유 금액": format_money(g['value_usd']),
                         "포트폴리오 비중": f"{g['pct_of_portfolio']:.2f}%",
                         "보고일": g.get("report_date", "N/A"),
                         "제출일": g.get("filing_date", "N/A"),
@@ -1480,7 +1497,7 @@ def display_guru_tab():
                 if total_val > 0:
                     st.info(
                         f"💰 {count}명의 유명 투자자가 총 "
-                        f"**${total_val:,.0f}** 규모로 보유 중 (SEC 13F 기준)"
+                        f"**{format_money(total_val)}** 규모로 보유 중 (SEC 13F 기준)"
                     )
             else:
                 st.caption("현재 추적 중인 15명의 유명 투자자 중 이 종목을 보유한 투자자가 없습니다.")
@@ -1502,7 +1519,7 @@ def display_guru_tab():
 
         st.markdown("""---
 **안내:**
-- 13F 공시는 $1억 이상 운용 기관의 분기별 보고서입니다.
+- 13F 공시는 1억 달러 이상 운용 기관의 분기별 보고서입니다.
 - 보고 기준일과 실제 제출일 사이에 최대 45일의 시차가 있을 수 있습니다.
 - 포트폴리오 뷰어 탭에서 각 구루의 상세 보유 내역을 확인할 수 있습니다.
         """)
@@ -1688,8 +1705,8 @@ def display_screener():
     for i, s in enumerate(filtered):
         g = s.get("grades", {})
         mc = s.get("market_cap")
-        mc_str = f"${mc/1e9:.1f}B" if mc and mc >= 1e9 else (
-            f"${mc/1e6:.0f}M" if mc else "N/A")
+        _sc = s.get("currency", "USD")
+        mc_str = format_market_cap(mc, _sc)
         pe = s.get("forward_pe") or s.get("trailing_pe")
         roe = s.get("roe")
         dy = s.get("dividend_yield")
@@ -1701,7 +1718,7 @@ def display_screener():
             "섹터": s.get("sector", "N/A"),
             "국가": s.get("country", "N/A"),
             "시가총액": mc_str,
-            "현재가": f"${s.get('current_price', 0):,.2f}",
+            "현재가": format_price(s.get('current_price', 0), _sc),
             "Overall": f"{g.get('overall_grade', '—')} ({g.get('overall_score', 0):.0f})",
             "Valuation": g.get("valuation_grade", "—"),
             "Financial": g.get("financial_grade", "—"),
@@ -2107,8 +2124,8 @@ def display_backtest_tab():
                         "종목": trade["ticker"],
                         "매매": trade["action"],
                         "수량": f"{trade['shares']:.2f}",
-                        "가격": f"${trade['price']:.2f}",
-                        "금액": f"${trade['value']:,.0f}",
+                        "가격": format_price(trade['price']),
+                        "금액": format_money(trade['value']),
                     })
             if trade_rows:
                 df_trades = pd.DataFrame(trade_rows)
