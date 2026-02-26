@@ -6,14 +6,29 @@ from dotenv import load_dotenv
 
 load_dotenv()  # .env 파일에서 환경변수 로드
 
-# ── API Keys (from .env) ────────────────────────────────────
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+
+def _get_secret(key: str, default: str = "") -> str:
+    """Read a secret from Streamlit secrets (cloud) or environment variable."""
+    # 1) Streamlit secrets (for Streamlit Community Cloud deployment)
+    try:
+        import streamlit as st
+        val = st.secrets.get(key, None)
+        if val:
+            return str(val)
+    except Exception:
+        pass
+    # 2) Environment variable (for local .env or system env)
+    return os.environ.get(key, default)
+
+
+# ── API Keys (from .env or Streamlit Secrets) ───────────────
+OPENAI_API_KEY = _get_secret("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = _get_secret("ANTHROPIC_API_KEY")
+OLLAMA_BASE_URL = _get_secret("OLLAMA_BASE_URL", "http://localhost:11434")
 
 # ── FRED API ────────────────────────────────────────────────
 # 무료 키 발급: https://fred.stlouisfed.org/docs/api/api_key.html
-FRED_API_KEY = os.environ.get("FRED_API_KEY", "")  # .env 또는 직접 입력
+FRED_API_KEY = _get_secret("FRED_API_KEY")  # .env, Streamlit Secrets, 또는 직접 입력
 
 # ── DCF 기본 가정 ───────────────────────────────────────────
 DCF_DEFAULTS = {
@@ -122,7 +137,10 @@ SEC_EDGAR_SUBMISSIONS_URL = "https://data.sec.gov/submissions"
 SEC_EDGAR_ARCHIVES_URL = "https://www.sec.gov/cgi-bin/browse-edgar"
 SEC_EDGAR_FULL_INDEX = "https://efts.sec.gov/LATEST"
 SEC_EDGAR_HEADERS = {
-    "User-Agent": "StockAnalyzer/1.0 (stock-analyzer@example.com)",
+    "User-Agent": os.environ.get(
+        "SEC_USER_AGENT",
+        "StockAnalyzer/1.0 (stock-analyzer@example.com)",
+    ),
     "Accept-Encoding": "gzip, deflate",
 }
 SEC_CACHE_TTL = 86400  # 24h — 13F는 분기별이므로 하루 캐시

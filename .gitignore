@@ -11,6 +11,7 @@ build/
 
 # Virtual environment
 .venv/
+.venv-*/
 venv/
 ENV/
 
@@ -24,6 +25,11 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Data caches
+# Data caches (regenerated at runtime)
 data/cache/
+data/damodaran/
 *.pkl
+
+# Test / dev only
+test_*.py
+run.bat

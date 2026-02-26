@@ -2,19 +2,22 @@
 Report Generator — LLM API wrapper for OpenAI, Anthropic, and Ollama.
 """
 
-import ssl
 import os
 import requests
 import httpx
 from typing import Dict, List, Optional
 from src.report.prompt_builder import build_analysis_prompt
 
-# ── SSL workaround for corporate proxy / firewall ─────────
-try:
-    ssl._create_default_https_context = ssl._create_unverified_context
-except AttributeError:
-    pass
-os.environ["PYTHONHTTPSVERIFY"] = "0"
+# ── SSL configuration ─────────────────────────────────────
+_DISABLE_SSL = os.environ.get("DISABLE_SSL_VERIFY", "0") == "1"
+
+if _DISABLE_SSL:
+    import ssl
+    try:
+        ssl._create_default_https_context = ssl._create_unverified_context
+    except AttributeError:
+        pass
+    os.environ["PYTHONHTTPSVERIFY"] = "0"
 
 
 # ── Provider → Model options ─────────────────────────────────
@@ -96,7 +99,7 @@ def _call_openai(
     try:
         client = OpenAI(
             api_key=api_key,
-            http_client=httpx.Client(verify=False),
+            http_client=httpx.Client(verify=not _DISABLE_SSL),
         )
         response = client.chat.completions.create(
             model=model,
@@ -181,7 +184,7 @@ def _call_anthropic_raw(
         "messages": [{"role": "user", "content": user}],
     }
     try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=120, verify=False)
+        resp = requests.post(url, json=payload, headers=headers, timeout=120, verify=not _DISABLE_SSL)
         data = resp.json()
 
         if resp.status_code == 401:
