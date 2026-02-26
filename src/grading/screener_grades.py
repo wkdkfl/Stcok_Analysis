@@ -232,20 +232,42 @@ def grade_screener_valuation(data: Dict[str, Any]) -> float:
 # OVERALL SCREENER GRADE
 # ═══════════════════════════════════════════════════════════
 
+# Key fields used to assess data completeness
+_COMPLETENESS_FIELDS_FIN = ["revenue_growth", "operating_margin", "roe", "fcf", "debt_to_equity"]
+_COMPLETENESS_FIELDS_VAL = ["trailing_pe", "ev_to_ebitda", "price_to_book"]
+_COMPLETENESS_FIELDS_ALL = _COMPLETENESS_FIELDS_FIN + _COMPLETENESS_FIELDS_VAL
+_COMPLETENESS_THRESHOLD = 3  # min fields required for a meaningful grade
+
+
+def _count_data_completeness(stock_info: Dict[str, Any]) -> int:
+    """Count how many of the 8 key grading fields have non-null values."""
+    count = 0
+    for key in _COMPLETENESS_FIELDS_ALL:
+        val = _safe(stock_info.get(key))
+        if val is not None:
+            count += 1
+    return count
+
+
 def compute_screener_grades(stock_info: Dict[str, Any],
                             macro_score: float = 50.0) -> Dict[str, Any]:
     """
     Compute lightweight screener grades.
     Financial (50%) + Valuation (30%) + Macro (20%).
+
+    data_completeness: int (0-8) — number of key fields available.
+    If < 3 fields are available, overall_grade is set to "N/A".
     """
     fin_score = grade_screener_financial(stock_info)
     val_score = grade_screener_valuation(stock_info)
     overall_score = _clamp(fin_score * 0.50 + val_score * 0.30 + macro_score * 0.20)
+    completeness = _count_data_completeness(stock_info)
+    overall_grade = score_to_grade(overall_score)
 
     return {
         "overall_score": round(overall_score, 1),
-        "overall_grade": score_to_grade(overall_score),
-        "overall_color": GRADE_COLORS.get(score_to_grade(overall_score), "#9E9E9E"),
+        "overall_grade": overall_grade,
+        "overall_color": GRADE_COLORS.get(overall_grade, "#9E9E9E"),
         "valuation_score": round(val_score, 1),
         "valuation_grade": score_to_grade(val_score),
         "valuation_color": GRADE_COLORS.get(score_to_grade(val_score), "#9E9E9E"),
@@ -255,4 +277,5 @@ def compute_screener_grades(stock_info: Dict[str, Any],
         "macro_score": round(macro_score, 1),
         "macro_grade": score_to_grade(macro_score),
         "macro_color": GRADE_COLORS.get(score_to_grade(macro_score), "#9E9E9E"),
+        "data_completeness": completeness,
     }

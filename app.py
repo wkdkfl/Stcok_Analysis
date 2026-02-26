@@ -18,6 +18,7 @@ from config import (
     MAX_PORTFOLIO_TICKERS, BENCHMARKS, BACKTEST_DEFAULTS, STRATEGY_NAMES,
     WEIGHT_SCHEME_NAMES, REBALANCE_FREQ_MAP,
     OPENAI_API_KEY, ANTHROPIC_API_KEY, AI_REPORT_DEFAULTS,
+    COUNTRY_OPTIONS, COUNTRY_REGION_TO_NAME, COUNTRY_MIN_CAP_OPTIONS,
 )
 from src.i18n import t, get_language
 from src.market_context import (
@@ -174,7 +175,8 @@ with st.sidebar:
 
         show_macro = st.checkbox(t("sidebar.show_macro"), value=True)
 
-        analyze_btn = st.button(t("sidebar.analyze_btn"), type="primary", use_container_width=True)
+        analyze_btn = st.button(t("sidebar.analyze_btn"), type="primary", use_container_width=True,
+                                on_click=lambda: st.session_state.update(active_tab="analysis"))
 
     # ── 스크리너 설정 ────────────────────────────────────
     with st.expander(t("sidebar.screener"), expanded=False):
@@ -184,6 +186,33 @@ with st.sidebar:
             index=2,
             key="scr_universe",
         )
+
+        # ── 국가 멀티셀렉트 ───────────────────────────
+        is_all_universe = (SCREENER_UNIVERSES.get(scr_universe) == "all")
+
+        scr_country = st.multiselect(
+            t("sidebar.country"),
+            list(COUNTRY_OPTIONS.keys()),
+            default=[],
+            key="scr_country",
+            help=t("sidebar.country_help"),
+        )
+
+        # "선택안함" 유니버스에서 국가 미선택 시 안내
+        if is_all_universe and not scr_country:
+            st.warning(t("sidebar.country_required"))
+
+        # ── 춨소 시가총액 ("선택안함" 유니버스일 때만 표시) ──
+        scr_min_cap = 1_000_000_000  # default $1B
+        if is_all_universe:
+            scr_min_cap_label = st.selectbox(
+                t("sidebar.min_market_cap"),
+                list(COUNTRY_MIN_CAP_OPTIONS.keys()),
+                index=3,  # default: "$1B"
+                key="scr_min_cap",
+                help=t("sidebar.min_market_cap_help"),
+            )
+            scr_min_cap = COUNTRY_MIN_CAP_OPTIONS.get(scr_min_cap_label, 1_000_000_000)
 
         scr_grade = st.multiselect(
             "Overall Grade",
@@ -207,13 +236,6 @@ with st.sidebar:
             help=t("sidebar.sector_help"),
         )
 
-        scr_country = st.text_input(
-            t("sidebar.country"),
-            value="",
-            key="scr_country",
-            placeholder="United States, Ireland",
-        )
-
         st.markdown(t("sidebar.extra_filters"))
         scr_pe = st.slider(t("sidebar.pe_range"), 0.0, 100.0, (0.0, 100.0), key="scr_pe")
         scr_div = st.slider(t("sidebar.min_div"), 0.0, 10.0, 0.0, 0.5, key="scr_div")
@@ -226,7 +248,8 @@ with st.sidebar:
         )
 
         scan_btn = st.button(t("sidebar.scan_btn"), type="primary",
-                             use_container_width=True, key="scan_btn")
+                             use_container_width=True, key="scan_btn",
+                             on_click=lambda: st.session_state.update(active_tab="screener"))
 
     # ── 13F 구루 ────────────────────────────────────────
     with st.expander(t("sidebar.guru"), expanded=False):
@@ -271,6 +294,7 @@ with st.sidebar:
         simulate_btn = st.button(
             t("sidebar.simulate_btn"), type="primary",
             use_container_width=True, key="simulate_btn",
+            on_click=lambda: st.session_state.update(active_tab="portfolio"),
         )
 
     # ── 백테스트 ────────────────────────────────────────
@@ -322,6 +346,7 @@ with st.sidebar:
         backtest_btn = st.button(
             t("sidebar.backtest_btn"), type="primary",
             use_container_width=True, key="backtest_btn",
+            on_click=lambda: st.session_state.update(active_tab="backtest"),
         )
 
     # ── AI 리포트 ────────────────────────────────────
@@ -1557,9 +1582,14 @@ def _render_guru_sector_chart(holdings: list):
 # SCREENER HELPERS
 # ═══════════════════════════════════════════════════════════
 
-def _apply_screener_filters(stocks: list) -> list:
+def _apply_screener_filters(stocks: list, scan_mode: str = "index") -> list:
     """Apply sidebar filter criteria to screener scan data."""
     filtered = list(stocks)
+
+    # Data completeness filter — exclude stocks with too little data for
+    # meaningful grading (prevents sparse-data stocks from getting fake grades)
+    filtered = [s for s in filtered
+                if s.get("grades", {}).get("data_completeness", 0) >= 3]
 
     # Grade filter
     grade_filter = st.session_state.get("scr_grade", [])
@@ -1589,12 +1619,22 @@ def _apply_screener_filters(stocks: list) -> list:
     if sector_filter:
         filtered = [s for s in filtered if s.get("sector") in sector_filter]
 
-    # Country filter
-    country_text = st.session_state.get("scr_country", "")
-    if country_text.strip():
-        countries = [c.strip() for c in country_text.split(",") if c.strip()]
-        if countries:
-            filtered = [s for s in filtered if s.get("country") in countries]
+    # Country filter (multiselect → label list)
+    # Skip country post-filter for country-based scans (already filtered by Screener API)
+    if scan_mode != "country":
+        country_labels = st.session_state.get("scr_country", [])
+        if country_labels:
+            # Convert selected country labels to Yahoo Finance country names
+            allowed_countries = set()
+            for label in country_labels:
+                region_code = COUNTRY_OPTIONS.get(label, "")
+                names = COUNTRY_REGION_TO_NAME.get(region_code, [])
+                allowed_countries.update(names)
+                allowed_countries.add(region_code)
+            if allowed_countries:
+                filtered = [s for s in filtered
+                            if s.get("country") in allowed_countries
+                            or str(s.get("country", "")).lower() in allowed_countries]
 
     # P/E range
     pe_range = st.session_state.get("scr_pe", (0.0, 100.0))
@@ -1637,10 +1677,24 @@ def _apply_screener_filters(stocks: list) -> list:
 def display_screener():
     """Display the stock screener tab."""
     from src.fetcher.screener_cache import (
-        load_cached_scan, scan_universe as _scan_universe, load_universe
+        load_cached_scan, scan_universe as _scan_universe, load_universe,
+        scan_by_countries as _scan_by_countries, _build_country_cache_key,
     )
 
     universe_key = SCREENER_UNIVERSES.get(scr_universe, "sp500_nasdaq100")
+    is_all = (universe_key == "all")
+
+    # For "all" universe, build cache key from selected countries + min cap
+    if is_all:
+        selected_countries = st.session_state.get("scr_country", [])
+        region_codes = [COUNTRY_OPTIONS[c] for c in selected_countries if c in COUNTRY_OPTIONS]
+        # Get min_market_cap from session state
+        min_cap_label = st.session_state.get("scr_min_cap", "$1B")
+        min_cap_val = COUNTRY_MIN_CAP_OPTIONS.get(min_cap_label, 1_000_000_000)
+        if region_codes:
+            universe_key = _build_country_cache_key(region_codes, min_cap_val)
+        else:
+            universe_key = "all_none"
 
     # ── Load data (session → disk cache) ─────────────────
     scan_data = None
@@ -1656,10 +1710,31 @@ def display_screener():
 
     # ── Run scan if button pressed ───────────────────────
     if scan_btn:
-        st.info(t("spinner.scanning", universe=scr_universe))
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        scan_data = _scan_universe(universe_key, progress_bar, status_text)
+        if is_all:
+            # Country-based full scan
+            selected_countries = st.session_state.get("scr_country", [])
+            region_codes = [COUNTRY_OPTIONS[c] for c in selected_countries if c in COUNTRY_OPTIONS]
+            if not region_codes:
+                st.warning(t("sidebar.country_required"))
+                return
+
+            min_cap_label = st.session_state.get("scr_min_cap", "$1B")
+            min_cap_val = COUNTRY_MIN_CAP_OPTIONS.get(min_cap_label, 1_000_000_000)
+            country_display = ", ".join(selected_countries)
+            st.info(t("spinner.scanning_country", countries=country_display))
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            scan_data = _scan_by_countries(
+                region_codes, min_cap_val, progress_bar, status_text
+            )
+            universe_key = _build_country_cache_key(region_codes, min_cap_val)
+        else:
+            # Index-based universe scan
+            st.info(t("spinner.scanning", universe=scr_universe))
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            scan_data = _scan_universe(universe_key, progress_bar, status_text)
+
         st.session_state["screener_data"] = scan_data
         st.session_state["screener_universe"] = universe_key
         progress_bar.empty()
@@ -1675,10 +1750,22 @@ def display_screener():
 
     # ── No data yet ──────────────────────────────────────
     if not scan_data:
-        universe_tickers = load_universe(universe_key)
-        st.info(
-            t("screener.no_data", universe=scr_universe, count=len(universe_tickers))
-        )
+        if is_all:
+            selected_countries = st.session_state.get("scr_country", [])
+            if not selected_countries:
+                st.info(t("sidebar.country_required"))
+            else:
+                country_display = ", ".join(selected_countries)
+                st.info(
+                    f"📋 **{country_display}** 전체 주식\n\n"
+                    f"아직 스캔 데이터가 없습니다. 사이드바의 **🔎 스크리너 필터**에서 "
+                    f"**'스크리닝 시작'** 버튼을 클릭하세요."
+                )
+        else:
+            universe_tickers = load_universe(universe_key)
+            st.info(
+                t("screener.no_data", universe=scr_universe, count=len(universe_tickers))
+            )
         return
 
     # ── Scan summary header ──────────────────────────────
@@ -1692,7 +1779,8 @@ def display_screener():
 
     # ── Apply filters ────────────────────────────────────
     stocks = scan_data.get("stocks", [])
-    filtered = _apply_screener_filters(stocks)
+    scan_mode = scan_data.get("scan_mode", "index")
+    filtered = _apply_screener_filters(stocks, scan_mode=scan_mode)
 
     st.subheader(t("screener.filter_result", filtered=len(filtered), total=len(stocks)))
 
@@ -1701,15 +1789,48 @@ def display_screener():
         return
 
     # ── Build display table ──────────────────────────────
+    def _fmt_mc(val, currency="USD"):
+        """Format market cap for display: $2.9T, 405조원, etc."""
+        if val is None:
+            return "—"
+        v = float(val)
+        if currency == "KRW":
+            if abs(v) >= 1e12:
+                return f"{v/1e12:,.1f}조원"
+            elif abs(v) >= 1e8:
+                return f"{v/1e8:,.0f}억원"
+            return f"₩{v:,.0f}"
+        if abs(v) >= 1e12:
+            return f"${v/1e12:.1f}T"
+        if abs(v) >= 1e9:
+            return f"${v/1e9:.1f}B"
+        if abs(v) >= 1e6:
+            return f"${v/1e6:.0f}M"
+        return f"${v:,.0f}"
+
+    def _fmt_price(val, currency="USD"):
+        if val is None:
+            return "—"
+        v = float(val)
+        if currency in ("KRW", "JPY"):
+            return f"{v:,.0f}"
+        return f"{v:,.2f}"
+
+    def _grade_cell(grade, score):
+        """Combine grade + score: 'A+ (87)' """
+        g = grade if grade else "—"
+        s = f"{score:.0f}" if score is not None else "—"
+        return f"{g} ({s})"
+
     rows = []
     for i, s in enumerate(filtered):
         g = s.get("grades", {})
         mc = s.get("market_cap")
-        _sc = s.get("currency", "USD")
-        mc_str = format_market_cap(mc, _sc)
+        _cur = s.get("currency", "USD")
         pe = s.get("forward_pe") or s.get("trailing_pe")
         roe = s.get("roe")
         dy = s.get("dividend_yield")
+        completeness = g.get("data_completeness", 0)
 
         rows.append({
             "#": i + 1,
@@ -1717,19 +1838,60 @@ def display_screener():
             "기업명": s.get("name", ""),
             "섹터": s.get("sector", "N/A"),
             "국가": s.get("country", "N/A"),
-            "시가총액": mc_str,
-            "현재가": format_price(s.get('current_price', 0), _sc),
-            "Overall": f"{g.get('overall_grade', '—')} ({g.get('overall_score', 0):.0f})",
-            "Valuation": g.get("valuation_grade", "—"),
-            "Financial": g.get("financial_grade", "—"),
-            "Macro": g.get("macro_grade", "—"),
-            "P/E": f"{pe:.1f}" if pe else "—",
-            "ROE": f"{roe*100:.1f}%" if roe else "—",
-            "배당률": f"{dy*100:.1f}%" if dy else "—",
+            "시가총액": _fmt_mc(mc, _cur),
+            "_mc": mc or 0,
+            "현재가": _fmt_price(s.get("current_price"), _cur),
+            "_price": s.get("current_price") or 0,
+            "종합": _grade_cell(g.get("overall_grade"), g.get("overall_score")),
+            "_overall": g.get("overall_score", 0),
+            "Valuation": _grade_cell(g.get("valuation_grade"), g.get("valuation_score")),
+            "_val": g.get("valuation_score", 0),
+            "Financial": _grade_cell(g.get("financial_grade"), g.get("financial_score")),
+            "_fin": g.get("financial_score", 0),
+            "Macro": _grade_cell(g.get("macro_grade"), g.get("macro_score")),
+            "_macro": g.get("macro_score", 0),
+            "P/E": pe,
+            "ROE": roe * 100 if roe else None,
+            "배당률": dy * 100 if dy else None,
+            "데이터": completeness,
         })
 
     df_screen = pd.DataFrame(rows)
-    st.dataframe(df_screen, use_container_width=True, hide_index=True, height=500)
+
+    # Pre-sort by sidebar selection (already sorted in filtered, but #
+    # column needs re-numbering isn't needed since # is just row order)
+
+    # Drop hidden sort helper columns before display
+    _sort_cols = ["_mc", "_price", "_overall", "_val", "_fin", "_macro"]
+    df_display = df_screen.drop(columns=_sort_cols)
+
+    col_cfg = {
+        "#": st.column_config.NumberColumn("#", width="small"),
+        "티커": st.column_config.TextColumn("티커", width="small"),
+        "기업명": st.column_config.TextColumn("기업명", width="medium"),
+        "섹터": st.column_config.TextColumn("섹터", width="small"),
+        "국가": st.column_config.TextColumn("국가", width="small"),
+        "시가총액": st.column_config.TextColumn("시가총액", width="small"),
+        "현재가": st.column_config.TextColumn("현재가", width="small"),
+        "종합": st.column_config.TextColumn("종합", width="small"),
+        "Valuation": st.column_config.TextColumn("Valuation", width="small"),
+        "Financial": st.column_config.TextColumn("Financial", width="small"),
+        "Macro": st.column_config.TextColumn("Macro", width="small"),
+        "P/E": st.column_config.NumberColumn("P/E", format="%.1f", width="small"),
+        "ROE": st.column_config.NumberColumn("ROE(%)", format="%.1f", width="small"),
+        "배당률": st.column_config.NumberColumn("배당률(%)", format="%.2f", width="small"),
+        "데이터": st.column_config.ProgressColumn(
+            "데이터", min_value=0, max_value=8, format="%d/8", width="small",
+        ),
+    }
+
+    st.dataframe(
+        df_display,
+        column_config=col_cfg,
+        use_container_width=True,
+        hide_index=True,
+        height=500,
+    )
 
     # ── Grade legend ─────────────────────────────────────
     with st.expander("ℹ️ 등급 범례 및 안내"):
@@ -2197,15 +2359,34 @@ if "backtest_results" not in st.session_state:
     st.session_state["backtest_results"] = None
 if "ai_reports" not in st.session_state:
     st.session_state["ai_reports"] = {}  # {ticker: report_text}
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = "analysis"
 
-# ── Main Tabs ────────────────────────────────────────────
-tab_analysis, tab_screener, tab_guru, tab_portfolio, tab_backtest = st.tabs([
-    t("tab.analysis"), t("tab.screener"), t("tab.guru"), t("tab.portfolio"), t("tab.backtest")
-])
+# ── Main Navigation ──────────────────────────────────────
+_TAB_KEYS = ["analysis", "screener", "guru", "portfolio", "backtest"]
+_TAB_LABELS = {
+    "analysis": t("tab.analysis"),
+    "screener": t("tab.screener"),
+    "guru": t("tab.guru"),
+    "portfolio": t("tab.portfolio"),
+    "backtest": t("tab.backtest"),
+}
 
+_nav_cols = st.columns(len(_TAB_KEYS))
+for _i, _key in enumerate(_TAB_KEYS):
+    _is_active = (st.session_state["active_tab"] == _key)
+    _btn_type = "primary" if _is_active else "secondary"
+    if _nav_cols[_i].button(
+        _TAB_LABELS[_key], key=f"nav_{_key}", type=_btn_type, use_container_width=True
+    ):
+        if not _is_active:
+            st.session_state["active_tab"] = _key
+            st.rerun()
 
-# ──────────── TAB: ANALYSIS ──────────────────────────────
-with tab_analysis:
+st.markdown("---")
+
+# ──────────── VIEW: ANALYSIS ─────────────────────────────
+if st.session_state["active_tab"] == "analysis":
     if analyze_btn:
         tickers = parse_tickers(ticker_input)
         if tickers:
@@ -2282,18 +2463,18 @@ with tab_analysis:
         - Sector-Specific Metrics
             """)
 
-# ──────────── TAB: SCREENER ──────────────────────────────
-with tab_screener:
+# ──────────── VIEW: SCREENER ─────────────────────────────
+elif st.session_state["active_tab"] == "screener":
     display_screener()
 
-# ──────────── TAB: 13F GURU ──────────────────────────────
-with tab_guru:
+# ──────────── VIEW: 13F GURU ─────────────────────────────
+elif st.session_state["active_tab"] == "guru":
     display_guru_tab()
 
-# ──────────── TAB: PORTFOLIO ─────────────────────────────
-with tab_portfolio:
+# ──────────── VIEW: PORTFOLIO ────────────────────────────
+elif st.session_state["active_tab"] == "portfolio":
     display_portfolio_tab()
 
-# ──────────── TAB: BACKTEST ──────────────────────────────
-with tab_backtest:
+# ──────────── VIEW: BACKTEST ─────────────────────────────
+elif st.session_state["active_tab"] == "backtest":
     display_backtest_tab()

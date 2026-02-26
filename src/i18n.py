@@ -25,7 +25,11 @@ _STRINGS: Dict[str, Dict[str, str]] = {
     "sidebar.cap": {"ko": "시가총액", "en": "Market Cap"},
     "sidebar.sector": {"ko": "섹터", "en": "Sector"},
     "sidebar.sector_help": {"ko": "비워두면 전체 섹터", "en": "Leave empty for all sectors"},
-    "sidebar.country": {"ko": "국가 (쉼표 구분, 비워두면 전체)", "en": "Country (comma separated, empty=all)"},
+    "sidebar.country": {"ko": "국가", "en": "Country"},
+    "sidebar.country_help": {"ko": "필터링할 국가를 선택하세요 (비워두면 전체)", "en": "Select countries to filter (empty = all)"},
+    "sidebar.country_required": {"ko": "⚠️ '선택안함 (전체)' 유니버스는 국가를 1개 이상 선택해야 합니다.", "en": "⚠️ 'None (All)' universe requires at least 1 country."},
+    "sidebar.min_market_cap": {"ko": "최소 시가총액", "en": "Min Market Cap"},
+    "sidebar.min_market_cap_help": {"ko": "스캔 범위를 줄이려면 시가총액 기준을 높이세요", "en": "Increase to narrow scan scope"},
     "sidebar.extra_filters": {"ko": "#### 추가 필터", "en": "#### Additional Filters"},
     "sidebar.pe_range": {"ko": "P/E 범위", "en": "P/E Range"},
     "sidebar.min_div": {"ko": "최소 배당수익률 (%)", "en": "Min Dividend Yield (%)"},
@@ -77,7 +81,8 @@ _STRINGS: Dict[str, Dict[str, str]] = {
     "spinner.fetching": {"ko": "📡 {ticker} 데이터 수집 중...", "en": "📡 Fetching {ticker} data..."},
     "spinner.analyzing": {"ko": "⚡ {ticker} 분석 중... (밸류에이션 / 품질 / 퀀트 / 매크로 동시 진행)", "en": "⚡ Analyzing {ticker}... (valuation / quality / quant / macro in parallel)"},
     "spinner.grades": {"ko": "📊 종합 등급 산출 중...", "en": "📊 Computing overall grades..."},
-    "spinner.scanning": {"ko": "🔄 **{universe}** 유니버스 스캔을 시작합니다... (병렬 처리: ~30초-2분)", "en": "🔄 Starting **{universe}** scan... (parallel: ~30s-2min)"},
+    "spinner.scanning": {"ko": "🔄 **{universe}** 스캔을 시작합니다... (병렬 처리: ~30초-2분)", "en": "🔄 Starting **{universe}** scan... (parallel: ~30s-2min)"},
+    "spinner.scanning_country": {"ko": "🔄 **{countries}** 전체 주식 스캔 중... (yfinance Screener API)", "en": "🔄 Scanning all stocks for **{countries}**... (yfinance Screener API)"},
     "spinner.ai_report": {"ko": "🤖 AI 리포트 생성 중... (10~30초 소요)", "en": "🤖 Generating AI report... (10-30 sec)"},
 
     # ── Error Messages ───────────────────────────────────

@@ -17,13 +17,19 @@ from typing import Dict, Any, Optional
 def detect_market(ticker: str) -> str:
     """
     Detect market from ticker suffix or exchange code.
-    Returns "KR" for Korean stocks, "US" otherwise.
+    Returns "KR" for Korean, "JP" for Japanese, "CN" for Chinese, "US" otherwise.
 
     Korean tickers:  005930.KS (KOSPI), 035720.KQ (KOSDAQ)
+    Japanese tickers: 7203.T (Tokyo)
+    Chinese tickers:  600519.SS (Shanghai), 000001.SZ (Shenzhen)
     """
     t = ticker.upper().strip()
     if t.endswith(".KS") or t.endswith(".KQ"):
         return "KR"
+    if t.endswith(".T"):
+        return "JP"
+    if t.endswith(".SS") or t.endswith(".SZ"):
+        return "CN"
     return "US"
 
 
@@ -36,13 +42,27 @@ def detect_market_from_data(data: Dict[str, Any]) -> str:
 
     if currency == "KRW":
         return "KR"
+    if currency == "JPY":
+        return "JP"
+    if currency == "CNY":
+        return "CN"
     if exchange in ("KSC", "KOE", "KSE"):
         return "KR"
+    if exchange in ("JPX", "TYO", "TSE"):
+        return "JP"
+    if exchange in ("SHH", "SHZ", "SSE", "SZSE"):
+        return "CN"
     return detect_market(data.get("ticker", ""))
 
 
 def is_korean_ticker(ticker: str) -> bool:
     return detect_market(ticker) == "KR"
+
+def is_japanese_ticker(ticker: str) -> bool:
+    return detect_market(ticker) == "JP"
+
+def is_chinese_ticker(ticker: str) -> bool:
+    return detect_market(ticker) == "CN"
 
 
 # ═══════════════════════════════════════════════════════════
@@ -80,10 +100,45 @@ _KR_DEFAULTS = {
 }
 
 
+_JP_DEFAULTS = {
+    "currency": "JPY",
+    "currency_symbol": "¥",
+    "tax_rate": 0.3062,         # 일본 법인세 실효세율 ~30.62%
+    "risk_free_rate": 0.01,     # JGB 10년물 ~1.0%
+    "equity_risk_premium": 0.065,
+    "terminal_growth_rate": 0.01,
+    "default_wacc": 0.08,
+    "benchmark_index": "^N225",
+    "benchmark_ticker": "^N225",
+    "vix_ticker": None,
+    "treasury_10y_ticker": None,
+    "trading_days": 245,
+}
+
+_CN_DEFAULTS = {
+    "currency": "CNY",
+    "currency_symbol": "¥",
+    "tax_rate": 0.25,           # 중국 법인세 25%
+    "risk_free_rate": 0.025,    # 중국 국채 10년물 ~2.5%
+    "equity_risk_premium": 0.07,
+    "terminal_growth_rate": 0.03,
+    "default_wacc": 0.10,
+    "benchmark_index": "000001.SS",
+    "benchmark_ticker": "000001.SS",
+    "vix_ticker": None,
+    "treasury_10y_ticker": None,
+    "trading_days": 244,
+}
+
+
 def get_market_defaults(market: str = "US") -> Dict[str, Any]:
     """Return market-specific default parameters."""
     if market == "KR":
         return dict(_KR_DEFAULTS)
+    if market == "JP":
+        return dict(_JP_DEFAULTS)
+    if market == "CN":
+        return dict(_CN_DEFAULTS)
     return dict(_US_DEFAULTS)
 
 
@@ -107,7 +162,7 @@ def get_dcf_overrides(market: str = "US") -> Dict[str, Any]:
 
 def get_currency_symbol(currency: str = "USD") -> str:
     """Return the symbol for a given currency code."""
-    return {"USD": "$", "KRW": "₩"}.get(currency, currency + " ")
+    return {"USD": "$", "KRW": "₩", "JPY": "¥", "CNY": "¥"}.get(currency, currency + " ")
 
 
 def format_price(value, currency: str = "USD", default: str = "N/A") -> str:
@@ -121,6 +176,8 @@ def format_price(value, currency: str = "USD", default: str = "N/A") -> str:
         v = float(value)
         sym = get_currency_symbol(currency)
         if currency == "KRW":
+            return f"{sym}{v:,.0f}"
+        if currency == "JPY":
             return f"{sym}{v:,.0f}"
         return f"{sym}{v:,.2f}"
     except (ValueError, TypeError):

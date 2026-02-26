@@ -153,8 +153,36 @@ SCREENER_UNIVERSES = {
     "S&P 500 + NASDAQ 100": "sp500_nasdaq100",
     "KOSPI 200": "kospi200",
     "KOSDAQ 150": "kosdaq150",
+    "선택안함 (전체)": "all",
 }
 SCREENER_CACHE_TTL = 86400  # 24h
+
+# ── Country Options (Screener) ───────────────────────────────
+COUNTRY_OPTIONS = {
+    "🇺🇸 미국 (US)": "us",
+    "🇰🇷 한국 (KR)": "kr",
+    "🇯🇵 일본 (JP)": "jp",
+    "🇨🇳 중국 (CN)": "cn",
+}
+
+# region code → Yahoo Finance country name (for post-filter matching)
+COUNTRY_REGION_TO_NAME = {
+    "us": ["United States"],
+    "kr": ["South Korea"],
+    "jp": ["Japan"],
+    "cn": ["China"],
+}
+
+# 국가별 최소 시가총액 슬라이더 기본값 (USD 기준)
+COUNTRY_MIN_CAP_OPTIONS = {
+    "$0 (전체)": 0,
+    "$100M": 100_000_000,
+    "$500M": 500_000_000,
+    "$1B": 1_000_000_000,
+    "$5B": 5_000_000_000,
+    "$10B": 10_000_000_000,
+    "$50B": 50_000_000_000,
+}
 
 # ── UI ───────────────────────────────────────────────────────
 CACHE_TTL = 3600  # 초단위

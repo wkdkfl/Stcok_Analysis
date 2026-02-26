@@ -392,8 +392,16 @@ def fetch_light_info(ticker: str) -> Optional[Dict[str, Any]]:
     return result
 
 
+# Key fields used to detect sparse API responses
+_SPARSE_CHECK_FIELDS = [
+    "revenueGrowth", "operatingMargins", "returnOnEquity", "freeCashflow",
+    "debtToEquity", "trailingPE", "enterpriseToEbitda", "priceToBook",
+]
+
+
 def _fetch_light_info_raw(ticker: str) -> Optional[Dict[str, Any]]:
-    """Raw fetch without cache. Auto-retries on transient network errors."""
+    """Raw fetch without cache. Auto-retries on transient network errors.
+    Also retries once if the response is sparse (>70% of key fields null)."""
     from src.fetcher.retry import with_retry
 
     @with_retry(max_retries=2, backoff=0.5)
@@ -405,6 +413,17 @@ def _fetch_light_info_raw(ticker: str) -> Optional[Dict[str, Any]]:
         price = info.get("currentPrice") or info.get("regularMarketPrice")
         if not price:
             return None
+
+        # Sparse response detection: if >70% of key fields are null, retry once
+        null_count = sum(1 for f in _SPARSE_CHECK_FIELDS if info.get(f) is None)
+        if null_count > len(_SPARSE_CHECK_FIELDS) * 0.7:
+            import time as _time
+            _time.sleep(1.0)
+            t2 = yf.Ticker(ticker, session=get_session())
+            info2 = t2.info or {}
+            null_count2 = sum(1 for f in _SPARSE_CHECK_FIELDS if info2.get(f) is None)
+            if null_count2 < null_count:
+                info = info2
 
         # debt_to_equity from info is in percentage form (e.g., 176.29 = 176.29%)
         # Convert to ratio form (1.7629) for consistency with grade_financial
@@ -558,6 +577,7 @@ def scan_universe(universe_name: str, progress_bar=None, status_text=None) -> Di
 
     scan_data = {
         "universe": universe_name,
+        "scan_mode": "index",
         "scan_time": datetime.now().isoformat(),
         "total_scanned": total,
         "successful": len(results),
@@ -568,5 +588,365 @@ def scan_universe(universe_name: str, progress_bar=None, status_text=None) -> Di
 
     # Save to disk
     save_cached_scan(universe_name, scan_data)
+
+    return scan_data
+
+
+# ═══════════════════════════════════════════════════════════
+# COUNTRY-BASED FULL STOCK SCAN (yfinance Screener API)
+# ═══════════════════════════════════════════════════════════
+
+def _build_country_cache_key(region_codes: List[str], min_market_cap: float) -> str:
+    """Build a deterministic cache key for country-based scans."""
+    codes_str = "_".join(sorted(region_codes))
+    cap_str = f"{int(min_market_cap)}"
+    return f"all_{codes_str}_{cap_str}"
+
+
+def fetch_stocks_by_countries(
+    region_codes: List[str],
+    min_market_cap: float = 0,
+    progress_bar=None,
+    status_text=None,
+) -> List[Dict[str, Any]]:
+    """
+    Fetch all stocks for given countries via yfinance Screener API with pagination.
+    Returns a list of stock dicts compatible with the existing scan pipeline.
+
+    Args:
+        region_codes: List of region codes (e.g. ["us", "kr"])
+        min_market_cap: Minimum market cap in USD (0 = no filter)
+        progress_bar: Optional Streamlit progress bar
+        status_text: Optional Streamlit text widget for status updates
+    """
+    from yfinance import EquityQuery
+
+    # Build query
+    filters = []
+
+    # Region filter
+    if len(region_codes) == 1:
+        filters.append(EquityQuery('eq', ['region', region_codes[0]]))
+    else:
+        region_queries = [EquityQuery('eq', ['region', rc]) for rc in region_codes]
+        filters.append(EquityQuery('or', region_queries))
+
+    # Market cap filter
+    if min_market_cap > 0:
+        filters.append(EquityQuery('gt', ['intradaymarketcap', min_market_cap]))
+
+    # Combine filters
+    if len(filters) == 1:
+        query = filters[0]
+    else:
+        query = EquityQuery('and', filters)
+
+    all_quotes = []
+    offset = 0
+    PAGE_SIZE = 250  # Yahoo max per page
+    total_expected = None
+
+    while True:
+        try:
+            result = yf.screen(query, offset=offset, size=PAGE_SIZE)
+            quotes = result.get('quotes', [])
+            total_expected = result.get('total', total_expected)
+
+            if not quotes:
+                break
+
+            all_quotes.extend(quotes)
+
+            if status_text and total_expected:
+                status_text.text(
+                    f"종목 목록 수집 중: {len(all_quotes)}/{total_expected} "
+                    f"({len(all_quotes)/total_expected*100:.0f}%)"
+                )
+            if progress_bar and total_expected:
+                progress_bar.progress(min(len(all_quotes) / total_expected, 1.0))
+
+            offset += PAGE_SIZE
+            if total_expected and offset >= total_expected:
+                break
+            if len(quotes) < PAGE_SIZE:
+                break
+
+            # Small delay to be nice to Yahoo
+            time.sleep(0.2)
+
+        except Exception as e:
+            if status_text:
+                status_text.text(f"페이지네이션 오류 (offset={offset}): {e}")
+            break
+
+    return all_quotes
+
+
+# ── Ticker suffix → country name mapping ─────────────────
+
+_TICKER_SUFFIX_COUNTRY = {
+    ".KS": "South Korea",
+    ".KQ": "South Korea",
+    ".T": "Japan",
+    ".SS": "China",
+    ".SZ": "China",
+    ".HK": "Hong Kong",
+    ".L": "United Kingdom",
+    ".DE": "Germany",
+    ".PA": "France",
+    ".TO": "Canada",
+    ".AX": "Australia",
+}
+
+
+def _detect_country_from_ticker(ticker: str) -> str:
+    """Detect country from ticker suffix. Falls back to 'United States'."""
+    t_upper = ticker.upper().strip()
+    for suffix, country in _TICKER_SUFFIX_COUNTRY.items():
+        if t_upper.endswith(suffix.upper()):
+            return country
+    return "United States"
+
+
+# Preferred share / non-common-stock ticker patterns
+import re as _re
+_PREFERRED_RE = _re.compile(
+    r'-P[A-Z]?$'      # MS-PI, WFC-PY
+    r'|\^[A-Z]+$'     # BRK^B (some feeds)
+    r'|\.PR[A-Z]?$'   # BAC.PRA
+    r'|-[A-Z]$'        # PBR-A (preferred ADR class)
+    r'|[A-Z]{4,}F$'    # BACHF, NSRGF (OTC foreign)
+    r'|[A-Z]{4,}Y$'    # BNDSY (OTC ADR)
+)
+
+
+def _convert_screener_quote(quote: dict) -> Optional[Dict[str, Any]]:
+    """Convert a yfinance Screener quote dict to our internal stock format.
+    Returns None for non-equity securities or suspected preferred/OTC tickers."""
+    # Filter out non-equity quote types
+    quote_type = quote.get("quoteType", "EQUITY")
+    if quote_type not in ("EQUITY", ""):
+        return None
+
+    mc = quote.get("marketCap")
+    price = quote.get("regularMarketPrice")
+    dy = quote.get("dividendYield")
+    ticker_str = quote.get("symbol", "")
+
+    # Filter out preferred shares, OTC foreign, etc. by ticker pattern
+    if _PREFERRED_RE.search(ticker_str):
+        return None
+
+    # ── Country detection: use ticker suffix (listing exchange), not region ──
+    country = _detect_country_from_ticker(ticker_str)
+
+    # ── Dividend yield normalization ──
+    # Screener API sometimes returns percentage (5.32) instead of ratio (0.0532)
+    if dy is not None and dy > 1.0:
+        dy = dy / 100.0
+
+    return {
+        "ticker": ticker_str,
+        "name": quote.get("longName") or quote.get("shortName", ""),
+        "sector": quote.get("sector", "N/A"),
+        "industry": quote.get("industry", "N/A"),
+        "country": country,
+        "market_cap": mc,
+        "current_price": price,
+        "enterprise_value": quote.get("enterpriseValue"),
+        # Valuation ratios
+        "trailing_pe": quote.get("trailingPE"),
+        "forward_pe": quote.get("forwardPE"),
+        "peg_ratio": quote.get("pegRatio"),
+        "price_to_book": quote.get("priceToBook"),
+        "price_to_sales": quote.get("priceToSalesTrailing12Months"),
+        "ev_to_ebitda": quote.get("enterpriseToEbitda"),
+        "ev_to_revenue": quote.get("enterpriseToRevenue"),
+        # Profitability
+        "revenue_growth": quote.get("revenueGrowth"),
+        "operating_margin": quote.get("operatingMargins"),
+        "profit_margin": quote.get("profitMargins"),
+        "gross_margin": quote.get("grossMargins"),
+        "roe": quote.get("returnOnEquity"),
+        "roa": quote.get("returnOnAssets"),
+        # Dividend & other
+        "dividend_yield": dy,
+        "beta": quote.get("beta"),
+        "debt_to_equity": None,  # Not in screener response
+        "fcf": None,  # Not in screener response
+        "revenue": quote.get("totalRevenue"),
+        "employees": quote.get("fullTimeEmployees"),
+        "shares_outstanding": quote.get("sharesOutstanding"),
+        "fifty_two_week_high": quote.get("fiftyTwoWeekHigh"),
+        "fifty_two_week_low": quote.get("fiftyTwoWeekLow"),
+    }
+
+
+def scan_by_countries(
+    region_codes: List[str],
+    min_market_cap: float = 0,
+    progress_bar=None,
+    status_text=None,
+    enrich_top_n: int = 500,
+) -> Dict[str, Any]:
+    """
+    Scan all stocks for given countries using yfinance Screener API.
+    Phase 1: Bulk fetch via Screener API (fast, 250/page).
+    Phase 2: Enrich top N stocks (by market cap) with individual .info calls
+             to get missing financial data for accurate grading.
+
+    Args:
+        region_codes: List of region codes (e.g. ["us", "kr"])
+        min_market_cap: Minimum market cap in USD
+        progress_bar: Optional Streamlit progress bar
+        status_text: Optional Streamlit text widget
+        enrich_top_n: Max number of stocks to enrich with .info (default 500)
+    """
+    from src.grading.screener_grades import compute_screener_grades
+    from src.fetcher.parallel import batch_fetch
+
+    start_time = time.time()
+    cache_key = _build_country_cache_key(region_codes, min_market_cap)
+
+    # ── Phase 1: Bulk fetch via Screener API ─────────────
+    if status_text:
+        status_text.text("Phase 1/3: yfinance Screener API로 종목 목록 수집 중...")
+    if progress_bar:
+        progress_bar.progress(0)
+
+    raw_quotes = fetch_stocks_by_countries(
+        region_codes, min_market_cap, progress_bar, status_text
+    )
+
+    if not raw_quotes:
+        return {
+            "universe": cache_key,
+            "scan_time": datetime.now().isoformat(),
+            "scan_mode": "country",
+            "total_scanned": 0,
+            "successful": 0,
+            "failed": 0,
+            "failed_tickers": [],
+            "stocks": [],
+        }
+
+    # ── Convert quotes to internal format ────────────────
+    if status_text:
+        status_text.text(f"Phase 1/3: {len(raw_quotes)}개 종목 변환 중...")
+
+    converted = []
+    for quote in raw_quotes:
+        try:
+            stock = _convert_screener_quote(quote)
+            if stock is not None and stock.get("current_price") and stock.get("ticker"):
+                converted.append(stock)
+        except Exception:
+            pass
+
+    # ── Phase 2: Enrich top N with individual .info calls ─
+    # Sort by market cap descending to prioritize large/liquid stocks
+    converted.sort(key=lambda s: s.get("market_cap") or 0, reverse=True)
+    to_enrich = converted[:enrich_top_n]
+
+    # Identify stocks needing enrichment (key financial fields all null)
+    _ENRICH_FIELDS = [
+        "revenue_growth", "operating_margin", "roe", "debt_to_equity",
+        "fcf", "revenue", "trailing_pe", "forward_pe", "price_to_book",
+        "ev_to_ebitda", "ev_to_revenue", "price_to_sales",
+    ]
+
+    def _needs_enrichment(stock: dict) -> bool:
+        non_null = sum(1 for f in _ENRICH_FIELDS if stock.get(f) is not None)
+        return non_null < 6  # Less than half of 12 key fields → enrich via .info
+
+    tickers_to_enrich = [s["ticker"] for s in to_enrich if _needs_enrichment(s)]
+    # Build ticker → stock mapping for quick access
+    ticker_to_stock = {s["ticker"]: s for s in converted}
+
+    if tickers_to_enrich:
+        if status_text:
+            status_text.text(
+                f"Phase 2/3: {len(tickers_to_enrich)}개 종목 재무 데이터 보강 중... "
+                f"(개별 .info 호출, 병렬 20워커)"
+            )
+        if progress_bar:
+            progress_bar.progress(0)
+
+        enrich_start = time.time()
+
+        def _on_enrich_progress(done, tot, item, success):
+            if progress_bar:
+                progress_bar.progress(done / tot)
+            if status_text:
+                elapsed = time.time() - enrich_start
+                rate = done / elapsed if elapsed > 0 else 1
+                remaining = (tot - done) / rate if rate > 0 else 0
+                status_text.text(
+                    f"Phase 2/3: 보강 중 {item} ({done}/{tot}) | "
+                    f"남은 시간: ~{remaining/60:.1f}분"
+                )
+
+        enriched_results, enrich_failed = batch_fetch(
+            fn=fetch_light_info,
+            items=tickers_to_enrich,
+            max_workers=20,
+            delay=0.05,
+            on_progress=_on_enrich_progress,
+        )
+
+        # Merge enriched data back
+        for ticker, info_data in enriched_results.items():
+            if info_data and ticker in ticker_to_stock:
+                stock = ticker_to_stock[ticker]
+                # Only fill null fields from .info; preserve non-null screener data
+                for key in _ENRICH_FIELDS + ["sector", "industry", "country"]:
+                    if stock.get(key) is None or stock.get(key) == "N/A":
+                        val = info_data.get(key)
+                        if val is not None and val != "N/A":
+                            stock[key] = val
+                # Also fill dividend_yield, beta if missing
+                for extra_key in ["dividend_yield", "beta"]:
+                    if stock.get(extra_key) is None:
+                        val = info_data.get(extra_key)
+                        if val is not None:
+                            stock[extra_key] = val
+
+    # ── Phase 3: Compute grades ──────────────────────────
+    if status_text:
+        status_text.text(f"Phase 3/3: {len(converted)}개 종목 등급 산출 중...")
+    if progress_bar:
+        progress_bar.progress(0)
+
+    results = []
+    failed_count = 0
+    total = len(converted)
+
+    for i, stock in enumerate(converted):
+        try:
+            grades = compute_screener_grades(stock)
+            stock["grades"] = grades
+            results.append(stock)
+        except Exception:
+            failed_count += 1
+
+        if progress_bar and total > 0:
+            progress_bar.progress((i + 1) / total)
+
+    elapsed = time.time() - start_time
+
+    scan_data = {
+        "universe": cache_key,
+        "scan_mode": "country",
+        "scan_time": datetime.now().isoformat(),
+        "total_scanned": len(raw_quotes),
+        "successful": len(results),
+        "failed": failed_count,
+        "failed_tickers": [],
+        "enriched": len(tickers_to_enrich) - len(enrich_failed) if tickers_to_enrich else 0,
+        "stocks": results,
+    }
+
+    # Save to disk cache
+    save_cached_scan(cache_key, scan_data)
 
     return scan_data
