@@ -106,6 +106,66 @@ _TIPS: Dict[str, Dict[str, str]] = {
             "Conservative estimate with built-in margin of safety."
         ),
     },
+    "val.peg": {
+        "ko": (
+            "**PEG Ratio 밸류에이션**\n\n"
+            "Peter Lynch 스타일: 적정 P/E = 성장률(%) × 섹터 PEG 계수.\n"
+            "성장주의 P/E 적정성을 판단하는 핵심 지표."
+        ),
+        "en": (
+            "**PEG Ratio Valuation**\n\n"
+            "Peter Lynch style: Fair P/E = Growth(%) × Sector PEG target.\n"
+            "Key metric for evaluating growth-stock P/E reasonableness."
+        ),
+    },
+    "val.ev_sales": {
+        "ko": (
+            "**EV/Sales (매출 멀티플)**\n\n"
+            "섹터 평균 P/S에 성장률·마진 품질 프리미엄/디스카운트 적용.\n"
+            "수익이 없는 고성장 기업 평가에 유용."
+        ),
+        "en": (
+            "**EV/Sales (Revenue Multiple)**\n\n"
+            "Sector-avg P/S adjusted for growth & margin quality.\n"
+            "Useful for high-growth companies with no earnings."
+        ),
+    },
+    "val.rule_of_40": {
+        "ko": (
+            "**Rule of 40**\n\n"
+            "SaaS/Tech 전용: 매출성장률(%) + 영업이익률(%) ≥ 40이면 양호.\n"
+            "점수에 따라 EV/Sales 멀티플을 매핑하여 적정가치 산출."
+        ),
+        "en": (
+            "**Rule of 40**\n\n"
+            "SaaS/Tech only: Revenue Growth(%) + Op Margin(%) ≥ 40 is healthy.\n"
+            "Maps R40 score to EV/Sales multiple for fair value."
+        ),
+    },
+    "val.sotp": {
+        "ko": (
+            "**SOTP (부문별 합산)**\n\n"
+            "사업 부문별 업종 EV/EBITDA를 적용하여 합산.\n"
+            "다각화 기업의 숨겨진 가치를 발견하는 데 유용."
+        ),
+        "en": (
+            "**SOTP (Sum of the Parts)**\n\n"
+            "Applies industry-specific EV/EBITDA to each segment.\n"
+            "Useful for uncovering hidden value in diversified firms."
+        ),
+    },
+    "val.analyst_target": {
+        "ko": (
+            "**Analyst Target Price**\n\n"
+            "월가 애널리스트 컨센서스 목표가 (평균 60% + 중간값 40% 혼합).\n"
+            "참여 애널리스트 수에 따라 신뢰도 결정."
+        ),
+        "en": (
+            "**Analyst Target Price**\n\n"
+            "Wall Street consensus target (60% mean + 40% midpoint blend).\n"
+            "Confidence determined by number of covering analysts."
+        ),
+    },
 
     # ═══════════════════════════════════════════════════════
     # Quality Scores

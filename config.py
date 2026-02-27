@@ -50,15 +50,80 @@ DCF_DEFAULTS = {
     "margin_std": 0.05,
 }
 
-# ── 밸류에이션 모델 가중치 ──────────────────────────────────
+# ── 밸류에이션 모델 가중치 (기본값) ──────────────────────────
 MODEL_WEIGHTS = {
-    "dcf": 0.30,
+    "dcf": 0.22,
     "reverse_dcf": 0.0,       # 시그널 전용, 가격 산출에 미포함
-    "residual_income": 0.15,
-    "epv": 0.15,
-    "ddm": 0.10,              # 배당주만 활성
-    "multiples": 0.20,
-    "graham": 0.10,
+    "residual_income": 0.12,
+    "epv": 0.12,
+    "ddm": 0.05,              # 배당주만 활성
+    "multiples": 0.15,
+    "graham": 0.07,
+    "peg": 0.07,
+    "ev_sales": 0.05,
+    "rule_of_40": 0.02,
+    "sotp": 0.03,
+    "analyst_target": 0.10,
+}
+
+# ── 섹터별 모델 가중치 매트릭스 ─────────────────────────────
+# 섹터 특성에 따라 적합한 모델에 높은 가중치 부여
+SECTOR_MODEL_WEIGHTS = {
+    "Technology": {
+        "dcf": 0.25, "residual_income": 0.05, "epv": 0.05, "ddm": 0.00,
+        "multiples": 0.15, "graham": 0.05, "peg": 0.15, "ev_sales": 0.10,
+        "rule_of_40": 0.10, "sotp": 0.00, "analyst_target": 0.10,
+    },
+    "Communication Services": {
+        "dcf": 0.20, "residual_income": 0.08, "epv": 0.08, "ddm": 0.03,
+        "multiples": 0.15, "graham": 0.05, "peg": 0.12, "ev_sales": 0.08,
+        "rule_of_40": 0.08, "sotp": 0.03, "analyst_target": 0.10,
+    },
+    "Healthcare": {
+        "dcf": 0.25, "residual_income": 0.10, "epv": 0.10, "ddm": 0.05,
+        "multiples": 0.15, "graham": 0.05, "peg": 0.10, "ev_sales": 0.10,
+        "rule_of_40": 0.00, "sotp": 0.05, "analyst_target": 0.05,
+    },
+    "Financial Services": {
+        "dcf": 0.10, "residual_income": 0.25, "epv": 0.15, "ddm": 0.10,
+        "multiples": 0.15, "graham": 0.10, "peg": 0.05, "ev_sales": 0.00,
+        "rule_of_40": 0.00, "sotp": 0.05, "analyst_target": 0.05,
+    },
+    "Consumer Cyclical": {
+        "dcf": 0.22, "residual_income": 0.12, "epv": 0.10, "ddm": 0.05,
+        "multiples": 0.18, "graham": 0.08, "peg": 0.08, "ev_sales": 0.05,
+        "rule_of_40": 0.00, "sotp": 0.02, "analyst_target": 0.10,
+    },
+    "Consumer Defensive": {
+        "dcf": 0.20, "residual_income": 0.12, "epv": 0.12, "ddm": 0.10,
+        "multiples": 0.15, "graham": 0.08, "peg": 0.05, "ev_sales": 0.03,
+        "rule_of_40": 0.00, "sotp": 0.05, "analyst_target": 0.10,
+    },
+    "Industrials": {
+        "dcf": 0.22, "residual_income": 0.12, "epv": 0.12, "ddm": 0.08,
+        "multiples": 0.18, "graham": 0.08, "peg": 0.05, "ev_sales": 0.03,
+        "rule_of_40": 0.00, "sotp": 0.02, "analyst_target": 0.10,
+    },
+    "Energy": {
+        "dcf": 0.20, "residual_income": 0.10, "epv": 0.15, "ddm": 0.10,
+        "multiples": 0.20, "graham": 0.10, "peg": 0.05, "ev_sales": 0.05,
+        "rule_of_40": 0.00, "sotp": 0.00, "analyst_target": 0.05,
+    },
+    "Utilities": {
+        "dcf": 0.15, "residual_income": 0.10, "epv": 0.20, "ddm": 0.15,
+        "multiples": 0.15, "graham": 0.10, "peg": 0.05, "ev_sales": 0.00,
+        "rule_of_40": 0.00, "sotp": 0.05, "analyst_target": 0.05,
+    },
+    "Real Estate": {
+        "dcf": 0.15, "residual_income": 0.15, "epv": 0.15, "ddm": 0.15,
+        "multiples": 0.15, "graham": 0.08, "peg": 0.02, "ev_sales": 0.00,
+        "rule_of_40": 0.00, "sotp": 0.05, "analyst_target": 0.10,
+    },
+    "Basic Materials": {
+        "dcf": 0.20, "residual_income": 0.10, "epv": 0.15, "ddm": 0.10,
+        "multiples": 0.20, "graham": 0.10, "peg": 0.05, "ev_sales": 0.05,
+        "rule_of_40": 0.00, "sotp": 0.00, "analyst_target": 0.05,
+    },
 }
 
 # ── 섹터별 평균 배수 (Fallback) ─────────────────────────────

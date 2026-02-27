@@ -592,6 +592,8 @@ def display_single_ticker(results: dict):
     overall_grade = grades.get("overall_grade", "N/A")
     overall_score = grades.get("overall_score", 0)
     fair_value = valuation.get("fair_value")
+    fair_value_adj = valuation.get("fair_value_adjusted") or fair_value
+    growth_adj_pct = valuation.get("growth_adjustment_pct", 0.0)
     upside = valuation.get("upside_pct")
     fv_range = valuation.get("fair_value_range")
 
@@ -607,12 +609,17 @@ def display_single_ticker(results: dict):
         st.metric("Overall Grade", f"{overall_grade} ({overall_score:.0f}점)",
                   help=tip("grade.overall"))
     with col3:
-        if fair_value:
-            st.metric("Fair Value (종합)", format_price(fair_value, _cur),
+        if fair_value_adj:
+            growth_label = ""
+            if growth_adj_pct and abs(growth_adj_pct) >= 0.1:
+                sign = "+" if growth_adj_pct > 0 else ""
+                growth_label = f" (Growth {sign}{growth_adj_pct:.1f}%)"
+            st.metric(f"Fair Value (종합){growth_label}",
+                      format_price(fair_value_adj, _cur),
                       delta=f"{upside:+.1f}%" if upside else None)
     with col4:
         if fv_range:
-            st.metric("Fair Value Range",
+            st.metric("Fair Value Range (IQR)",
                       f"{format_price(fv_range[0], _cur)} - {format_price(fv_range[1], _cur)}")
 
     # ── Category Grade Cards (7 cards in a row) ──────────
@@ -871,13 +878,19 @@ def _render_valuation_tab(results: dict):
     st.subheader(t("val.comparison"))
     with st.expander("ℹ️ Valuation Models Guide", expanded=False):
         for key in ["val.dcf", "val.reverse_dcf", "val.residual_income",
-                     "val.epv", "val.ddm", "val.multiples", "val.graham"]:
+                     "val.epv", "val.ddm", "val.multiples", "val.graham",
+                     "val.peg", "val.ev_sales", "val.rule_of_40",
+                     "val.sotp", "val.analyst_target"]:
             st.markdown(tip(key))
             st.markdown("---")
     summary = valuation.get("models_summary", [])
     if summary:
         df = pd.DataFrame(summary)
-        df.columns = ["Model", get_fair_value_col_header(_cur), "Upside (%)", "Confidence"]
+        col_names = ["Model", get_fair_value_col_header(_cur), "Upside (%)", "Confidence", "Weight"]
+        if len(df.columns) == len(col_names):
+            df.columns = col_names
+        else:
+            df.columns = ["Model", get_fair_value_col_header(_cur), "Upside (%)", "Confidence"]
         st.dataframe(df, use_container_width=True, hide_index=True)
 
     # Charts side by side

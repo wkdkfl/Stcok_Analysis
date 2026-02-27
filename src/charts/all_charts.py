@@ -148,7 +148,7 @@ def chart_margins(data: Dict[str, Any]) -> Optional[plt.Figure]:
 def chart_valuation_comparison(valuation_results: Dict[str, Any],
                                 current_price: float,
                                 currency: str = "USD") -> Optional[plt.Figure]:
-    """Horizontal bar chart — 7 model fair values vs current price."""
+    """Horizontal bar chart — all model fair values vs current price."""
     summary = valuation_results.get("models_summary", [])
     if not summary:
         return None
@@ -167,7 +167,7 @@ def chart_valuation_comparison(valuation_results: Dict[str, Any],
     if not models:
         return None
 
-    fig, ax = plt.subplots(figsize=(8, max(3, len(models) * 0.6)))
+    fig, ax = plt.subplots(figsize=(8, max(3, len(models) * 0.55)))
     style_fig(fig, ax)
 
     y = np.arange(len(models))
@@ -176,11 +176,17 @@ def chart_valuation_comparison(valuation_results: Dict[str, Any],
     ax.axvline(x=current_price, color=COLORS["current_price"], linestyle="--",
                linewidth=2, label=f"Current: {_sym}{current_price:,.0f}")
 
+    # Growth-adjusted aggregate fair value line
+    adj_fv = valuation_results.get("fair_value_adjusted")
+    if adj_fv and adj_fv > 0:
+        ax.axvline(x=adj_fv, color="#7B1FA2", linestyle="-",
+                   linewidth=2, alpha=0.8, label=f"Adj. FV: {_sym}{adj_fv:,.0f}")
+
     ax.set_yticks(y)
     ax.set_yticklabels(models, fontsize=9)
     ax.set_xlabel(f"Fair Value ({_sym})")
     ax.set_title("Valuation Model Comparison", fontsize=12, fontweight="bold")
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=8, loc="lower right")
 
     for i, v in enumerate(values):
         ax.text(v + current_price * 0.02, i, f"{_sym}{v:,.0f}", va="center", fontsize=8)
