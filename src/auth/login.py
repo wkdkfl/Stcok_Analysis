@@ -6,6 +6,7 @@ Supports email/password and Google OAuth via Supabase Auth.
 import re
 import streamlit as st
 from typing import Optional, Dict
+from urllib.parse import parse_qs, urlparse
 from src.db.users import (
     create_user, get_user_by_email, verify_password,
     create_session, validate_session, delete_session,
@@ -205,6 +206,9 @@ def render_auth_page():
     Render the login/signup page. 
     Call this at the top of app.py. Returns True if authenticated.
     """
+    # ── Handle OAuth callback (Google redirect back) ─────
+    _handle_oauth_callback()
+
     user = get_current_user()
     if user:
         return True
@@ -359,18 +363,14 @@ def render_auth_page():
 def _handle_google_oauth():
     """
     Initiate Google OAuth via Supabase Auth.
-    In Streamlit Cloud, this redirects user to Google consent page.
+    Redirects user to Google consent page.
     """
     try:
         from src.db.connection import get_supabase
         sb = get_supabase()
 
-        # Get the current URL for redirect
-        # In Streamlit Cloud, this is the app's public URL
-        redirect_url = st.session_state.get("_oauth_redirect")
-        if not redirect_url:
-            # Default for Streamlit Cloud
-            redirect_url = "https://owen-stockanalysis-app.streamlit.app/"
+        # Determine redirect URL based on environment
+        redirect_url = _get_redirect_url()
 
         # Use Supabase Auth OAuth
         response = sb.auth.sign_in_with_oauth({
@@ -380,23 +380,145 @@ def _handle_google_oauth():
             }
         })
 
-        if response and hasattr(response, 'url'):
+        if response and hasattr(response, 'url') and response.url:
             st.markdown(
                 f'<meta http-equiv="refresh" content="0; url={response.url}">',
                 unsafe_allow_html=True,
             )
             st.info("Google 로그인 페이지로 이동합니다..." if get_language() == "ko" else "Redirecting to Google...")
         else:
-            st.warning(
-                "Google OAuth가 설정되지 않았습니다. 관리자에게 문의하세요."
-                if get_language() == "ko" else
-                "Google OAuth is not configured. Contact admin."
-            )
+            _show_oauth_not_configured()
     except Exception as e:
-        st.warning(
-            f"Google OAuth를 사용할 수 없습니다. 이메일/비밀번호로 로그인해주세요.\n\n{str(e)}"
-            if get_language() == "ko" else
-            f"Google OAuth unavailable. Please use email/password.\n\n{str(e)}"
+        err_msg = str(e)
+        if "not enabled" in err_msg.lower() or "unsupported provider" in err_msg.lower():
+            _show_oauth_not_configured()
+        else:
+            st.warning(
+                f"Google OAuth를 사용할 수 없습니다. 이메일/비밀번호로 로그인해주세요.\n\n{err_msg}"
+                if get_language() == "ko" else
+                f"Google OAuth unavailable. Please use email/password.\n\n{err_msg}"
+            )
+
+
+def _get_redirect_url() -> str:
+    """Get the appropriate redirect URL for OAuth callback."""
+    # 1) Check session state override
+    custom = st.session_state.get("_oauth_redirect")
+    if custom:
+        return custom
+
+    # 2) Try to detect from Streamlit's own URL (works in Cloud & local)
+    try:
+        from streamlit.web.server.server_util import get_url
+        # Not reliable, fall through
+    except Exception:
+        pass
+
+    # 3) Check secrets for explicit site URL
+    try:
+        site_url = st.secrets.get("SITE_URL", "")
+        if site_url:
+            return site_url
+    except Exception:
+        pass
+
+    # 4) Default: localhost for local dev, Cloud URL for production
+    import os
+    if os.environ.get("STREAMLIT_SERVER_PORT"):
+        port = os.environ["STREAMLIT_SERVER_PORT"]
+        return f"http://localhost:{port}"
+
+    return "http://localhost:8501"
+
+
+def _handle_oauth_callback():
+    """
+    Handle the OAuth callback when Google redirects back.
+    Supabase appends access_token as a URL fragment (#access_token=...),
+    which JS can read. This function checks query params for code-based flow.
+    """
+    try:
+        params = st.query_params
+        # Supabase PKCE flow returns ?code=...
+        auth_code = params.get("code")
+        if not auth_code:
+            return
+
+        # Already processed this code
+        if st.session_state.get("_oauth_code_processed") == auth_code:
+            return
+
+        from src.db.connection import get_supabase
+        sb = get_supabase()
+
+        # Exchange code for session
+        response = sb.auth.exchange_code_for_session({"auth_code": auth_code})
+
+        if response and response.user:
+            su = response.user
+            email = su.email
+            name = (su.user_metadata or {}).get("full_name", "") or (su.user_metadata or {}).get("name", "")
+            oauth_id = su.id
+
+            # Find or create user in our users table
+            existing = get_user_by_email(email)
+            if existing:
+                user = existing
+            else:
+                user = create_user(
+                    email=email,
+                    password="",  # No password for OAuth users
+                    name=name,
+                    role="free",
+                    oauth_provider="google",
+                    oauth_id=oauth_id,
+                )
+
+            if user:
+                token = create_session(user["id"])
+                update_last_login(user["id"])
+                log_audit(user["id"], "login", f"Google OAuth: {email}")
+                _set_session(user, token)
+
+            # Mark this code as processed
+            st.session_state["_oauth_code_processed"] = auth_code
+
+            # Clear the ?code= from URL
+            st.query_params.clear()
+            st.rerun()
+
+    except Exception as e:
+        # Don't block app if callback handling fails
+        err = str(e)
+        if "code" in err.lower() and ("expired" in err.lower() or "invalid" in err.lower()):
+            # Code already used or expired — clear and let user try again
+            st.query_params.clear()
+        else:
+            st.warning(
+                f"Google 로그인 콜백 처리 실패: {err}"
+                if get_language() == "ko" else
+                f"Google login callback error: {err}"
+            )
+
+
+def _show_oauth_not_configured():
+    """Show a helpful message when Google OAuth is not configured."""
+    lang = get_language()
+    if lang == "ko":
+        st.info(
+            "🔧 **Google 로그인 설정 필요**\n\n"
+            "Supabase 대시보드에서 Google 프로바이더를 활성화해야 합니다:\n"
+            "1. [Supabase Dashboard](https://supabase.com/dashboard) → Authentication → Providers → Google\n"
+            "2. Google Cloud Console에서 OAuth Client ID/Secret 생성\n"
+            "3. 활성화 후 이메일/비밀번호로 먼저 로그인하세요."
+        )
+    else:
+        st.info(
+            "🔧 **Google Sign-in Setup Required**\n\n"
+            "Enable Google provider in Supabase Dashboard:\n"
+            "1. [Supabase Dashboard](https://supabase.com/dashboard) → Authentication → Providers → Google\n"
+            "2. Create OAuth Client ID/Secret in Google Cloud Console\n"
+            "3. Use email/password login in the meantime."
         )
 
 
