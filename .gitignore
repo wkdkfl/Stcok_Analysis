@@ -1,5 +1,9 @@
 # Environment variables (API keys)
 .env
+.env.*
+
+# Streamlit secrets (local dev)
+.streamlit/secrets.toml
 
 # Python
 __pycache__/

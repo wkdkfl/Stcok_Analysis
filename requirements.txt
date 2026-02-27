@@ -14,3 +14,9 @@ openai>=1.0.0
 # curl_cffi — yfinance 1.x SSL impersonation (usually installed as yfinance dep)
 # SEC EDGAR 13F: uses requests (no extra dep)
 # Ollama: uses requests (no extra dep — local LLM)
+
+# ── Auth & Database ─────────────────────────────────
+supabase>=2.0.0
+bcrypt>=4.0.0
+cryptography>=41.0.0
+httpx>=0.25.0

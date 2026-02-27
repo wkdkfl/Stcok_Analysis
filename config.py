@@ -21,6 +21,11 @@ def _get_secret(key: str, default: str = "") -> str:
     return os.environ.get(key, default)
 
 
+# ── Supabase (DB & Auth) ─────────────────────────────────────
+SUPABASE_URL = _get_secret("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = _get_secret("SUPABASE_SERVICE_KEY")
+ENCRYPTION_KEY = _get_secret("ENCRYPTION_KEY")  # Fernet key for API key encryption
+
 # ── API Keys (from .env or Streamlit Secrets) ───────────────
 OPENAI_API_KEY = _get_secret("OPENAI_API_KEY")
 ANTHROPIC_API_KEY = _get_secret("ANTHROPIC_API_KEY")

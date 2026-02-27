@@ -26,6 +26,13 @@ from src.market_context import (
     get_stmt_unit_label, get_currency_symbol, get_fair_value_col_header,
     detect_market,
 )
+from src.auth.login import render_auth_page, render_user_sidebar, get_current_user
+from src.auth.permissions import (
+    get_max_tickers, get_screener_limit, require_permission,
+    can_use_portfolio, can_use_backtest, can_generate_ai_report,
+    get_ai_report_quota, can_save_analysis, is_admin, require_role,
+)
+from src.auth.rate_limit import require_rate_limit
 
 # ── Page Config ──────────────────────────────────────────
 st.set_page_config(
@@ -129,6 +136,15 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
+# ═══════════════════════════════════════════════════════════
+# AUTHENTICATION GATE
+# ═══════════════════════════════════════════════════════════
+if not render_auth_page():
+    st.stop()
+
+# User is authenticated from this point
+_current_user = get_current_user()
 
 # ═══════════════════════════════════════════════════════════
 # SIDEBAR
@@ -397,15 +413,19 @@ with st.sidebar:
     st.caption(t("sidebar.data_source"))
     st.caption("Models: DCF, Reverse DCF, Residual Income, EPV, DDM, Multiples, Graham")
 
+# ── User info in sidebar ─────────────────────────────────
+render_user_sidebar()
+
 
 # ═══════════════════════════════════════════════════════════
 # MAIN LOGIC
 # ═══════════════════════════════════════════════════════════
 
 def parse_tickers(text: str) -> list:
-    """Parse comma-separated ticker input."""
+    """Parse comma-separated ticker input, respecting user's tier limit."""
+    max_t = get_max_tickers()
     tickers = [t.strip().upper() for t in text.replace(";", ",").split(",")]
-    return [t for t in tickers if t][:MAX_TICKERS]
+    return [t for t in tickers if t][:max_t]
 
 
 def run_analysis(ticker: str, dcf_overrides: dict):
@@ -679,6 +699,15 @@ def _render_ai_report_tab(results: dict):
     st.subheader(t("ai.title", ticker=ticker))
     st.caption(t("ai.caption"))
 
+    # ── Quota info ───────────────────────────────────────
+    used, limit = get_ai_report_quota()
+    if limit is not None:
+        if limit == 0:
+            st.warning(t("auth.upgrade", role="Premium"))
+            st.info(t("ai.guide"))
+            return
+        st.caption(t("auth.quota_used", used=used, limit=limit))
+
     # Check for cached report
     cached = st.session_state.get("ai_reports", {}).get(ticker)
 
@@ -698,6 +727,13 @@ def _render_ai_report_tab(results: dict):
                 st.rerun()
 
     if generate_btn:
+        # Rate limit check
+        if not can_generate_ai_report():
+            st.error(t("auth.upgrade", role="Premium"))
+            return
+        if not require_rate_limit("ai_report"):
+            return
+
         from src.report.generator import generate_report
 
         # Read sidebar settings
@@ -727,6 +763,24 @@ def _render_ai_report_tab(results: dict):
                     st.session_state["ai_reports"] = {}
                 st.session_state["ai_reports"][ticker] = report_text
                 cached = report_text  # show immediately
+
+                # Auto-save to DB
+                try:
+                    from src.db.data import save_report
+                    from src.db.users import log_audit
+                    user = get_current_user()
+                    if user:
+                        save_report(
+                            user_id=user["id"],
+                            ticker=ticker,
+                            company_name=data.get("name", ""),
+                            report_markdown=report_text,
+                            llm_provider=provider,
+                            llm_model=model,
+                        )
+                        log_audit(user["id"], "report", f"AI report: {ticker} ({provider}/{model})")
+                except Exception:
+                    pass  # non-critical, don't block UI
             else:
                 st.warning(t("ai.empty"))
                 return
@@ -2364,12 +2418,16 @@ if "active_tab" not in st.session_state:
 
 # ── Main Navigation ──────────────────────────────────────
 _TAB_KEYS = ["analysis", "screener", "guru", "portfolio", "backtest"]
+if is_admin():
+    _TAB_KEYS.append("admin")
+
 _TAB_LABELS = {
     "analysis": t("tab.analysis"),
     "screener": t("tab.screener"),
     "guru": t("tab.guru"),
     "portfolio": t("tab.portfolio"),
     "backtest": t("tab.backtest"),
+    "admin": t("tab.admin"),
 }
 
 _nav_cols = st.columns(len(_TAB_KEYS))
@@ -2388,36 +2446,69 @@ st.markdown("---")
 # ──────────── VIEW: ANALYSIS ─────────────────────────────
 if st.session_state["active_tab"] == "analysis":
     if analyze_btn:
-        tickers = parse_tickers(ticker_input)
-        if tickers:
-            dcf_overrides = {
-                "risk_free_rate": DCF_DEFAULTS["risk_free_rate"],
-                "equity_risk_premium": DCF_DEFAULTS["equity_risk_premium"],
-                "terminal_growth_rate": terminal_g,
-                "high_growth_years": high_growth_yrs,
-                "fade_years": DCF_DEFAULTS["fade_years"],
-            }
-            if wacc_override != 0.10:
-                dcf_overrides["default_wacc"] = wacc_override
-            if growth_override != 0.0:
-                dcf_overrides["growth_override"] = growth_override / 100
-
-            new_results = []
-            for ticker in tickers:
-                result = run_analysis(ticker, dcf_overrides)
-                if result:
-                    new_results.append(result)
-
-            if new_results:
-                st.session_state["all_results"] = new_results
-            else:
-                st.error(t("err.no_tickers"))
+        if not require_rate_limit("analysis"):
+            pass  # rate limited
         else:
-            st.warning(t("err.enter_ticker"))
+            tickers = parse_tickers(ticker_input)
+            if tickers:
+                dcf_overrides = {
+                    "risk_free_rate": DCF_DEFAULTS["risk_free_rate"],
+                    "equity_risk_premium": DCF_DEFAULTS["equity_risk_premium"],
+                    "terminal_growth_rate": terminal_g,
+                    "high_growth_years": high_growth_yrs,
+                    "fade_years": DCF_DEFAULTS["fade_years"],
+                }
+                if wacc_override != 0.10:
+                    dcf_overrides["default_wacc"] = wacc_override
+                if growth_override != 0.0:
+                    dcf_overrides["growth_override"] = growth_override / 100
+
+                # Log analysis action
+                try:
+                    from src.db.users import log_audit
+                    user = get_current_user()
+                    if user:
+                        log_audit(user["id"], "analysis", f"Tickers: {', '.join(tickers)}")
+                except Exception:
+                    pass
+
+                new_results = []
+                for ticker in tickers:
+                    result = run_analysis(ticker, dcf_overrides)
+                    if result:
+                        new_results.append(result)
+
+                if new_results:
+                    st.session_state["all_results"] = new_results
+                else:
+                    st.error(t("err.no_tickers"))
+            else:
+                st.warning(t("err.enter_ticker"))
 
     all_results = st.session_state.get("all_results")
 
     if all_results:
+        # ── Save Analysis Button ─────────────────────────
+        if can_save_analysis():
+            _save_col1, _save_col2 = st.columns([1, 5])
+            with _save_col1:
+                if st.button(t("auth.save_analysis"), key="save_analysis_btn"):
+                    try:
+                        from src.db.data import save_analysis
+                        user = get_current_user()
+                        if user:
+                            for r in all_results:
+                                _d = r.get("data", {})
+                                save_analysis(
+                                    user_id=user["id"],
+                                    ticker=_d.get("ticker", ""),
+                                    company_name=_d.get("name", ""),
+                                    results_json=r,
+                                )
+                            st.success(t("auth.saved"))
+                    except Exception as e:
+                        st.error(f"Save failed: {e}")
+
         if len(all_results) == 1:
             display_single_ticker(all_results[0])
         else:
@@ -2465,7 +2556,10 @@ if st.session_state["active_tab"] == "analysis":
 
 # ──────────── VIEW: SCREENER ─────────────────────────────
 elif st.session_state["active_tab"] == "screener":
-    display_screener()
+    if not require_rate_limit("screener"):
+        pass
+    else:
+        display_screener()
 
 # ──────────── VIEW: 13F GURU ─────────────────────────────
 elif st.session_state["active_tab"] == "guru":
@@ -2473,8 +2567,18 @@ elif st.session_state["active_tab"] == "guru":
 
 # ──────────── VIEW: PORTFOLIO ────────────────────────────
 elif st.session_state["active_tab"] == "portfolio":
-    display_portfolio_tab()
+    if require_permission("portfolio_enabled"):
+        display_portfolio_tab()
 
 # ──────────── VIEW: BACKTEST ─────────────────────────────
 elif st.session_state["active_tab"] == "backtest":
-    display_backtest_tab()
+    if require_permission("backtest_enabled"):
+        display_backtest_tab()
+
+# ──────────── VIEW: ADMIN ────────────────────────────────
+elif st.session_state["active_tab"] == "admin":
+    if is_admin():
+        from src.auth.admin import render_admin_panel
+        render_admin_panel()
+    else:
+        st.error("🔒 Admin access required.")

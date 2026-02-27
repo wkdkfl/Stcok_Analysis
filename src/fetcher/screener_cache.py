@@ -7,6 +7,9 @@ Caches scan results to JSON files with 24h TTL.
 import json
 import os
 import time
+import threading
+import tempfile
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from io import StringIO
 from typing import Dict, List, Any, Optional
@@ -372,7 +375,9 @@ def _get_fallback_tickers(name: str) -> List[Dict[str, str]]:
 # LIGHTWEIGHT DATA FETCHING (with in-memory cache)
 # ═══════════════════════════════════════════════════════════
 
-_light_info_cache: Dict[str, Any] = {}  # {ticker: {"data": ..., "_ts": float}}
+_MAX_CACHE_SIZE = 500  # LRU limit for in-memory cache
+_light_info_cache: OrderedDict = OrderedDict()  # {ticker: {"data": ..., "_ts": float}}
+_light_info_lock = threading.Lock()
 _LIGHT_INFO_TTL = 14400  # 4 hours
 
 
@@ -380,15 +385,24 @@ def fetch_light_info(ticker: str) -> Optional[Dict[str, Any]]:
     """
     Fetch lightweight stock info (.info only, no statements/history).
     Returns a flat dict with key financial metrics, or None on failure.
-    Cached in-memory for 4 hours.
+    Cached in-memory for 4 hours. Thread-safe with LRU eviction.
     """
     ticker = ticker.upper().strip()
-    cached = _light_info_cache.get(ticker)
-    if cached and (time.time() - cached.get("_ts", 0)) < _LIGHT_INFO_TTL:
-        return cached["data"]
+    with _light_info_lock:
+        cached = _light_info_cache.get(ticker)
+        if cached and (time.time() - cached.get("_ts", 0)) < _LIGHT_INFO_TTL:
+            _light_info_cache.move_to_end(ticker)  # LRU touch
+            return cached["data"]
 
     result = _fetch_light_info_raw(ticker)
-    _light_info_cache[ticker] = {"data": result, "_ts": time.time()}
+
+    with _light_info_lock:
+        _light_info_cache[ticker] = {"data": result, "_ts": time.time()}
+        _light_info_cache.move_to_end(ticker)
+        # Evict oldest if over size limit
+        while len(_light_info_cache) > _MAX_CACHE_SIZE:
+            _light_info_cache.popitem(last=False)
+
     return result
 
 
@@ -497,13 +511,30 @@ def load_cached_scan(universe_name: str) -> Optional[Dict[str, Any]]:
 
 
 def save_cached_scan(universe_name: str, scan_data: Dict[str, Any]):
-    """Save scan results to JSON file."""
+    """Save scan results to JSON file (atomic write to prevent corruption)."""
     _ensure_dirs()
     date_str = datetime.now().strftime("%Y-%m-%d")
     path = os.path.join(_CACHE_DIR, f"screener_{universe_name}_{date_str}.json")
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(scan_data, f, ensure_ascii=False, default=str)
+        # Atomic write: write to temp file, then rename
+        fd, tmp_path = tempfile.mkstemp(
+            dir=_CACHE_DIR, suffix=".tmp", prefix="screener_"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(scan_data, f, ensure_ascii=False, default=str)
+            # On Windows, remove target first if it exists
+            if os.path.exists(path):
+                os.replace(tmp_path, path)
+            else:
+                os.rename(tmp_path, path)
+        except Exception:
+            # Clean up temp file on failure
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
     except Exception:
         pass
 

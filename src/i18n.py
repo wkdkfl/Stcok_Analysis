@@ -165,6 +165,21 @@ _STRINGS: Dict[str, Dict[str, str]] = {
     "scan.success": {"ko": "성공", "en": "Success"},
     "scan.failure": {"ko": "실패", "en": "Failed"},
     "scan.remaining": {"ko": "남은 시간", "en": "Remaining"},
+
+    # ── Auth / User ──────────────────────────────────────
+    "auth.login_required": {"ko": "로그인이 필요합니다.", "en": "Login required."},
+    "auth.welcome": {"ko": "환영합니다, {name}!", "en": "Welcome, {name}!"},
+    "auth.logout": {"ko": "🚪 로그아웃", "en": "🚪 Logout"},
+    "auth.upgrade": {"ko": "🔒 이 기능은 {role} 이상 등급에서 사용 가능합니다.", "en": "🔒 This feature requires {role} or higher."},
+    "auth.quota_used": {"ko": "오늘 사용: {used}/{limit}건", "en": "Today: {used}/{limit} used"},
+    "auth.save_analysis": {"ko": "💾 분석 저장", "en": "💾 Save Analysis"},
+    "auth.saved": {"ko": "✅ 저장되었습니다!", "en": "✅ Saved!"},
+    "auth.my_analyses": {"ko": "📂 내 분석 기록", "en": "📂 My Analyses"},
+    "auth.my_reports": {"ko": "📂 내 리포트", "en": "📂 My Reports"},
+    "auth.admin_panel": {"ko": "👑 관리자 패널", "en": "👑 Admin Panel"},
+
+    # ── Tab (with admin) ─────────────────────────────────
+    "tab.admin": {"ko": "👑 관리자", "en": "👑 Admin"},
 }
 
 
