@@ -365,17 +365,7 @@ def render_auth_page():
             st.session_state["_show_signup"] = True
             st.rerun()
 
-        # Google OAuth button
-        st.markdown(
-            "<p style='text-align:center; color:#888; font-size:12px;'>OR</p>",
-            unsafe_allow_html=True,
-        )
-        if st.button(
-            "🔵 Google로 로그인" if lang == "ko" else "🔵 Sign in with Google",
-            use_container_width=True,
-            key="google_login_btn",
-        ):
-            _handle_google_oauth()
+        # Google OAuth button 제거됨
 
     return False
 
