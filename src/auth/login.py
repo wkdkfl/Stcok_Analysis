@@ -257,6 +257,71 @@ def render_auth_page():
             st.session_state["language"] = _lang_map[_sel]
             st.rerun()
 
+        # ── SIGNUP PAGE ─────────────────────────────────
+        if st.session_state.get("_show_signup"):
+            st.markdown(f"### {'📝 회원가입' if lang == 'ko' else '📝 Sign Up'}")
+
+            with st.form("signup_form", clear_on_submit=False):
+                signup_name = st.text_input(
+                    "이름 (선택)" if lang == "ko" else "Name (optional)",
+                    key="signup_name",
+                )
+                signup_email = st.text_input(
+                    "이메일" if lang == "ko" else "Email",
+                    placeholder="user@example.com",
+                    key="signup_email",
+                )
+                signup_password = st.text_input(
+                    "비밀번호" if lang == "ko" else "Password",
+                    type="password",
+                    key="signup_password",
+                    help=(
+                        "8자 이상, 대/소/숫자/특수 중 3가지 포함"
+                        if lang == "ko" else
+                        "Min 8 chars, at least 3 of: upper/lower/digit/special"
+                    ),
+                )
+                signup_confirm = st.text_input(
+                    "비밀번호 확인" if lang == "ko" else "Confirm Password",
+                    type="password",
+                    key="signup_confirm",
+                )
+                signup_submitted = st.form_submit_button(
+                    "📝 회원가입" if lang == "ko" else "📝 Sign Up",
+                    use_container_width=True,
+                    type="primary",
+                )
+
+                if signup_submitted:
+                    if not signup_email or not signup_password:
+                        st.error(
+                            "이메일과 비밀번호를 입력해주세요."
+                            if lang == "ko" else "Please enter email and password."
+                        )
+                    elif signup_password != signup_confirm:
+                        st.error(
+                            "비밀번호가 일치하지 않습니다."
+                            if lang == "ko" else "Passwords do not match."
+                        )
+                    else:
+                        success, msg = signup(signup_email, signup_password, signup_name)
+                        if success:
+                            st.success(msg)
+                            st.session_state["_show_signup"] = False
+                            st.rerun()
+                        else:
+                            st.error(msg)
+
+            if st.button(
+                "⬅ 로그인으로 돌아가기" if lang == "ko" else "⬅ Back to Login",
+                use_container_width=True,
+                key="back_to_login_btn",
+            ):
+                st.session_state["_show_signup"] = False
+                st.rerun()
+
+            return False
+
         # ── LOGIN SECTION ────────────────────────────────
         st.markdown(f"### {'🔐 로그인' if lang == 'ko' else '🔐 Login'}")
 
@@ -291,6 +356,15 @@ def render_auth_page():
                     else:
                         st.error(msg)
 
+        # Sign-up button (navigates to signup page)
+        if st.button(
+            "📝 회원가입" if lang == "ko" else "📝 Sign Up",
+            use_container_width=True,
+            key="goto_signup_btn",
+        ):
+            st.session_state["_show_signup"] = True
+            st.rerun()
+
         # Google OAuth button
         st.markdown(
             "<p style='text-align:center; color:#888; font-size:12px;'>OR</p>",
@@ -302,60 +376,6 @@ def render_auth_page():
             key="google_login_btn",
         ):
             _handle_google_oauth()
-
-        # ── SIGNUP SECTION ───────────────────────────────
-        st.markdown("---")
-        st.markdown(f"### {'📝 회원가입' if lang == 'ko' else '📝 Sign Up'}")
-
-        with st.form("signup_form", clear_on_submit=False):
-            signup_name = st.text_input(
-                "이름 (선택)" if lang == "ko" else "Name (optional)",
-                key="signup_name",
-            )
-            signup_email = st.text_input(
-                "이메일" if lang == "ko" else "Email",
-                placeholder="user@example.com",
-                key="signup_email",
-            )
-            signup_password = st.text_input(
-                "비밀번호" if lang == "ko" else "Password",
-                type="password",
-                key="signup_password",
-                help=(
-                    "8자 이상, 대/소/숫자/특수 중 3가지 포함"
-                    if lang == "ko" else
-                    "Min 8 chars, at least 3 of: upper/lower/digit/special"
-                ),
-            )
-            signup_confirm = st.text_input(
-                "비밀번호 확인" if lang == "ko" else "Confirm Password",
-                type="password",
-                key="signup_confirm",
-            )
-            signup_submitted = st.form_submit_button(
-                "📝 회원가입" if lang == "ko" else "📝 Sign Up",
-                use_container_width=True,
-                type="primary",
-            )
-
-            if signup_submitted:
-                if not signup_email or not signup_password:
-                    st.error(
-                        "이메일과 비밀번호를 입력해주세요."
-                        if lang == "ko" else "Please enter email and password."
-                    )
-                elif signup_password != signup_confirm:
-                    st.error(
-                        "비밀번호가 일치하지 않습니다."
-                        if lang == "ko" else "Passwords do not match."
-                    )
-                else:
-                    success, msg = signup(signup_email, signup_password, signup_name)
-                    if success:
-                        st.success(msg)
-                        st.rerun()
-                    else:
-                        st.error(msg)
 
     return False
 
@@ -380,13 +400,11 @@ def _handle_google_oauth():
             _show_oauth_not_configured()
             return
 
-        # Construct the OAuth URL directly (implicit flow)
-        # This bypasses the SDK's PKCE flow entirely
+        # Construct the OAuth URL via Supabase Auth
         import urllib.parse
         params = urllib.parse.urlencode({
             "provider": "google",
             "redirect_to": redirect_url,
-            "response_type": "token",  # Force implicit flow → returns #access_token
         })
         oauth_url = f"{supabase_url}/auth/v1/authorize?{params}"
 
@@ -444,7 +462,7 @@ def _get_redirect_url() -> str:
 
 
 def _process_oauth_token(access_token: str, supabase_url: str, supabase_key: str):
-    """Process an OAuth access token: get user info from Supabase & create session."""
+    """Process a Supabase access token: get user info & create session."""
     import httpx
 
     resp = httpx.get(
@@ -486,37 +504,71 @@ def _process_oauth_token(access_token: str, supabase_url: str, supabase_key: str
     return False
 
 
+def _process_google_access_token(google_token: str):
+    """
+    Use a Google access token directly to get user info from Google API.
+    Fallback when Supabase OAuth state fails (e.g., third-party cookies blocked).
+    """
+    import httpx
+
+    resp = httpx.get(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        headers={"Authorization": f"Bearer {google_token}"},
+        verify=False,
+        timeout=15.0,
+    )
+
+    if resp.status_code == 200:
+        info = resp.json()
+        email = info.get("email", "")
+        name = info.get("name", "")
+        oauth_id = info.get("id", "")  # Google user ID
+
+        if not email:
+            return False
+
+        existing = get_user_by_email(email)
+        if existing:
+            user = existing
+        else:
+            user = create_user(
+                email=email,
+                password="",
+                name=name,
+                role="free",
+                oauth_provider="google",
+                oauth_id=oauth_id,
+            )
+
+        if user:
+            token = create_session(user["id"])
+            update_last_login(user["id"])
+            log_audit(user["id"], "login", f"Google OAuth (direct): {email}")
+            _set_session(user, token)
+        return True
+    return False
+
+
 def _handle_oauth_callback():
     """
     Handle the OAuth callback after Google login.
-    
-    Implicit flow: Supabase redirects back with #access_token=... in URL fragment.
-    URL fragments are NOT sent to the server, so we use JavaScript to:
-    1. Detect the fragment
-    2. Redirect to ?access_token=... so Streamlit can read it via query_params
-    
-    Also handles ?code= (PKCE/authorization code flow) as fallback.
+    Handles three cases:
+      1. ?code=xxx        — Supabase authorization code (PKCE)
+      2. ?access_token=xxx — token captured from URL fragment by JS
+      3. ?error=bad_oauth_callback — Supabase state failed, but Google
+         token may still be in URL fragment; inject JS to capture it
     """
     params = st.query_params
 
-    # ── Handle ?code= (authorization code flow fallback) ──
+    # ── (A) Handle ?code= (authorization code flow) ──
     auth_code = params.get("code")
     if auth_code:
         if st.session_state.get("_oauth_code_processed") == auth_code:
             return
         try:
             import httpx
-            supabase_url = ""
-            supabase_key = ""
-            try:
-                supabase_url = st.secrets.get("SUPABASE_URL", "")
-                supabase_key = st.secrets.get("SUPABASE_SERVICE_KEY", "")
-            except Exception:
-                import os
-                supabase_url = os.environ.get("SUPABASE_URL", "")
-                supabase_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+            supabase_url, supabase_key = _get_supabase_creds()
 
-            # Exchange authorization code for tokens
             resp = httpx.post(
                 f"{supabase_url}/auth/v1/token?grant_type=authorization_code",
                 json={"auth_code": auth_code},
@@ -527,47 +579,37 @@ def _handle_oauth_callback():
 
             if resp.status_code == 200:
                 token_data = resp.json()
-                access_token_from_code = token_data.get("access_token", "")
-                if access_token_from_code:
-                    _process_oauth_token(access_token_from_code, supabase_url, supabase_key)
+                at = token_data.get("access_token", "")
+                if at and _process_oauth_token(at, supabase_url, supabase_key):
                     st.session_state["_oauth_code_processed"] = auth_code
                     st.query_params.clear()
                     st.rerun()
-                else:
-                    st.query_params.clear()
-            else:
-                # Code exchange failed, clear and continue
-                st.query_params.clear()
+            st.query_params.clear()
         except Exception:
             st.query_params.clear()
         return
 
-    # ── Process access_token from query params (implicit flow via JS) ──
+    # ── (B) Handle ?access_token= (captured from fragment by JS) ──
     access_token = params.get("access_token")
     if access_token:
-        # Already processed
         if st.session_state.get("_oauth_token_processed") == access_token:
             return
-
         try:
-            import httpx
-            supabase_url = ""
-            supabase_key = ""
-            try:
-                supabase_url = st.secrets.get("SUPABASE_URL", "")
-                supabase_key = st.secrets.get("SUPABASE_SERVICE_KEY", "")
-            except Exception:
-                import os
-                supabase_url = os.environ.get("SUPABASE_URL", "")
-                supabase_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+            supabase_url, supabase_key = _get_supabase_creds()
 
-            if _process_oauth_token(access_token, supabase_url, supabase_key):
+            # Try Supabase token first (works if Supabase flow succeeded)
+            ok = _process_oauth_token(access_token, supabase_url, supabase_key)
+
+            # Fallback: treat as Google access token (ya29.xxx)
+            if not ok:
+                ok = _process_google_access_token(access_token)
+
+            if ok:
                 st.session_state["_oauth_token_processed"] = access_token
                 st.query_params.clear()
                 st.rerun()
             else:
                 st.query_params.clear()
-
         except Exception as e:
             st.query_params.clear()
             st.warning(
@@ -577,16 +619,24 @@ def _handle_oauth_callback():
             )
         return
 
-    # ── Step 1: Inject JS to capture URL fragment ──
-    # After Google OAuth implicit flow, Supabase redirects with
-    #   http://localhost:8501/#access_token=xxx&token_type=bearer&...
-    # URL fragments (#) are invisible to the server/Streamlit.
-    # This JS runs in the main window, detects the fragment,
-    # and converts it into a query param that Streamlit CAN read.
+    # ── (C) Handle ?error=bad_oauth_callback ──
+    # Supabase state cookie was lost (third-party cookies blocked etc.)
+    # but Google access token may still exist in URL fragment → capture it.
+    oauth_error = params.get("error_code") or params.get("error")
+    if oauth_error:
+        # Clear error query params; JS below will capture fragment token
+        st.query_params.clear()
+
+    # ── (D) Inject JS to capture URL fragment ──
+    # After OAuth redirect the URL may contain:
+    #   #access_token=xxx&token_type=bearer&...
+    # or (on error):
+    #   ?error=...#access_token=ya29.xxx
+    # URL fragments (#) are invisible to Streamlit.
+    # This JS detects the fragment and reloads with ?access_token=xxx.
     st.markdown("""
     <script>
     (function() {
-        // Try multiple ways to access the top-level URL hash
         var hash = '';
         try { hash = window.top.location.hash; } catch(e) {}
         if (!hash) { try { hash = window.parent.location.hash; } catch(e) {} }
@@ -596,7 +646,6 @@ def _handle_oauth_callback():
             var params = new URLSearchParams(hash.substring(1));
             var accessToken = params.get('access_token');
             if (accessToken) {
-                // Build clean URL with access_token as query param
                 var loc = window.top || window.parent || window;
                 var base = loc.location.origin + loc.location.pathname;
                 loc.location.replace(base + '?access_token=' + encodeURIComponent(accessToken));
@@ -605,6 +654,15 @@ def _handle_oauth_callback():
     })();
     </script>
     """, unsafe_allow_html=True)
+
+
+def _get_supabase_creds():
+    """Return (supabase_url, supabase_key) from secrets or env."""
+    try:
+        return st.secrets.get("SUPABASE_URL", ""), st.secrets.get("SUPABASE_SERVICE_KEY", "")
+    except Exception:
+        import os
+        return os.environ.get("SUPABASE_URL", ""), os.environ.get("SUPABASE_SERVICE_KEY", "")
 
 
 def _show_oauth_not_configured():
