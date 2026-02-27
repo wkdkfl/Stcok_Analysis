@@ -9,6 +9,14 @@ import pandas as pd
 import numpy as np
 import sys
 import os
+import ssl
+import urllib3
+
+# ── Disable SSL verification globally (corporate proxy workaround) ──
+os.environ["PYTHONHTTPSVERIFY"] = "0"
+os.environ["CURL_CA_BUNDLE"] = ""
+ssl._create_default_https_context = ssl._create_unverified_context  # noqa: S323
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ── Path setup ───────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -133,6 +141,9 @@ st.markdown("""
             padding: 4px 6px !important;
         }
     }
+
+    /* ── Hide Streamlit toolbar ────────────────────── */
+    [data-testid="stToolbar"] { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
