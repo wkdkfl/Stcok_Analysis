@@ -14,26 +14,28 @@ def init_mobile_detect():
     Inject JavaScript to detect viewport width once per session.
     Sets st.session_state["is_mobile"] = True/False.
     """
-    if "is_mobile" in st.session_state:
-        return  # already detected
-
-    # Default to False (desktop) until JS reports back
-    st.session_state["is_mobile"] = False
-
-    # Use query params to receive the value back from JS
+    # Always check query params first (handles redirect callback)
     params = st.query_params
     vw = params.get("_vw")
     if vw:
         try:
             st.session_state["is_mobile"] = int(vw) <= MOBILE_BREAKPOINT
         except (ValueError, TypeError):
-            pass
-        # Clean up the param
+            if "is_mobile" not in st.session_state:
+                st.session_state["is_mobile"] = False
+        # Clean up the param so it doesn't show in URL
         try:
             del params["_vw"]
         except Exception:
             pass
         return
+
+    # Already detected in a previous run (no _vw param present)
+    if "is_mobile" in st.session_state:
+        return
+
+    # First ever load — default to False until JS reports back
+    st.session_state["is_mobile"] = False
 
     # Inject JS that redirects once with viewport width as query param
     components.html(
@@ -61,12 +63,16 @@ def is_mobile() -> bool:
 
 def auto_collapse_sidebar():
     """
-    On mobile, automatically collapse the sidebar after the page loads
+    On mobile, automatically collapse the sidebar ONCE after login
     so the content area is fully visible. The user can reopen it
-    via the floating toggle button.
+    via the floating toggle button (FAB).
+    Only fires once per session to avoid fighting user actions.
     """
     if not is_mobile():
         return
+    if st.session_state.get("_sidebar_auto_collapsed"):
+        return  # already collapsed once this session
+    st.session_state["_sidebar_auto_collapsed"] = True
     components.html(
         """
         <script>

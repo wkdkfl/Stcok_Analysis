@@ -195,9 +195,17 @@ st.markdown("""
         min-height: 38px;
     }
 
-    /* ── Desktop-only: Hide toolbar ────────────────── */
-    @media (min-width: 769px) {
-        [data-testid="stToolbar"] { display: none !important; }
+    /* ── Hide Streamlit toolbar (visibility so children can override) ── */
+    [data-testid="stToolbar"] {
+        visibility: hidden !important;
+        pointer-events: none !important;
+        height: 0 !important;
+        overflow: visible !important;
+    }
+    /* Sidebar expand button: always visible on all screen sizes */
+    [data-testid="stExpandSidebarButton"] {
+        visibility: visible !important;
+        pointer-events: auto !important;
     }
 
     /* ── Tablet (≤ 768px) ──────────────────────────── */
@@ -223,26 +231,14 @@ st.markdown("""
             padding: 6px 8px !important;
         }
 
-        /* ── Mobile Sidebar Toggle ─────────────────── */
-        [data-testid="stToolbar"] {
+        /* ── Mobile Sidebar Toggle (FAB) ───────────── */
+        [data-testid="stExpandSidebarButton"] {
+            visibility: visible !important;
+            pointer-events: auto !important;
             position: fixed !important;
-            top: auto !important;
             bottom: 16px !important;
             left: 16px !important;
-            right: auto !important;
-            width: auto !important;
-            height: auto !important;
             z-index: 999999 !important;
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            padding: 0 !important;
-        }
-        [data-testid="stToolbar"] > * {
-            display: none !important;
-        }
-        [data-testid="stToolbar"] [data-testid="stExpandSidebarButton"] {
-            display: flex !important;
         }
         [data-testid="stExpandSidebarButton"] button {
             width: 48px !important;
@@ -328,6 +324,10 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ── Mobile Detection (before auth so login page gets mobile layout) ──
+init_mobile_detect()
+_mobile = is_mobile()
+_plotly_cfg = {"displayModeBar": False} if _mobile else {}
 
 # ═══════════════════════════════════════════════════════════
 # AUTHENTICATION GATE
@@ -336,12 +336,7 @@ if not render_auth_page():
     st.stop()
 
 # User is authenticated from this point
-
-# ── Mobile Detection ─────────────────────────────────────
-init_mobile_detect()
 auto_collapse_sidebar()
-_mobile = is_mobile()
-_plotly_cfg = {"displayModeBar": False} if _mobile else {}
 _current_user = get_current_user()
 
 # ═══════════════════════════════════════════════════════════
