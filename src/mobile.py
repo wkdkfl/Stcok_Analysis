@@ -17,16 +17,26 @@ def init_mobile_detect():
     """
     Inject JavaScript to detect viewport width once per session.
     Sets st.session_state["is_mobile"] = True/False.
+
+    Flow:
+      1st load  → inject JS → JS redirects with ?_vw=<width>
+      2nd load  → read _vw, set is_mobile, mark _mobile_detected
+      3rd+ load → immediate return (no query-param access)
     """
-    # Always check query params first (handles redirect callback)
+    # ── Fast path: already fully detected → skip everything ──
+    if st.session_state.get("_mobile_detected"):
+        return
+
+    # ── Check _vw query param (set by JS redirect) ──
     params = st.query_params
     vw = params.get("_vw")
     if vw:
         try:
             st.session_state["is_mobile"] = int(vw) <= MOBILE_BREAKPOINT
         except (ValueError, TypeError):
-            if "is_mobile" not in st.session_state:
-                st.session_state["is_mobile"] = False
+            st.session_state["is_mobile"] = False
+        # Mark detection as complete BEFORE touching query params
+        st.session_state["_mobile_detected"] = True
         # Clean up the param so it doesn't show in URL
         try:
             del params["_vw"]
@@ -36,6 +46,7 @@ def init_mobile_detect():
 
     # Already detected in a previous run (no _vw param present)
     if "is_mobile" in st.session_state:
+        st.session_state["_mobile_detected"] = True
         return
 
     # First ever load — default to False until JS reports back
@@ -47,12 +58,14 @@ def init_mobile_detect():
             """
             <script>
             (function() {
-                const vw = window.innerWidth || document.documentElement.clientWidth;
-                const url = new URL(window.parent.location);
-                if (!url.searchParams.has('_vw')) {
-                    url.searchParams.set('_vw', vw);
-                    window.parent.location.replace(url.toString());
-                }
+                try {
+                    const vw = window.innerWidth || document.documentElement.clientWidth;
+                    const url = new URL(window.parent.location);
+                    if (!url.searchParams.has('_vw')) {
+                        url.searchParams.set('_vw', vw);
+                        window.parent.location.replace(url.toString());
+                    }
+                } catch(e) { /* cross-origin or security error — ignored */ }
             })();
             </script>
             """,

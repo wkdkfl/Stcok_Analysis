@@ -12,11 +12,20 @@ import os
 import ssl
 import urllib3
 
-# ── Disable SSL verification globally (corporate proxy workaround) ──
-os.environ["PYTHONHTTPSVERIFY"] = "0"
-os.environ["CURL_CA_BUNDLE"] = ""
-ssl._create_default_https_context = ssl._create_unverified_context  # noqa: S323
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+# ── SSL configuration (corporate proxy workaround) ───────────────
+# Only disable SSL when .env has DISABLE_SSL_VERIFY=1 (local/corporate).
+# On Streamlit Cloud, SSL works normally — no override needed.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+if os.environ.get("DISABLE_SSL_VERIFY", "0") == "1":
+    os.environ["PYTHONHTTPSVERIFY"] = "0"
+    os.environ["CURL_CA_BUNDLE"] = ""
+    ssl._create_default_https_context = ssl._create_unverified_context  # noqa: S323
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ── Path setup ───────────────────────────────────────────
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
