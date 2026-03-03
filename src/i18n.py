@@ -67,6 +67,14 @@ _STRINGS: Dict[str, Dict[str, str]] = {
     "tab.portfolio": {"ko": "💼 포트폴리오", "en": "💼 Portfolio"},
     "tab.backtest": {"ko": "📈 백테스트", "en": "📈 Backtest"},
 
+    # ── Main Tabs (mobile icon-only) ─────────────────────
+    "tab_m.analysis": {"ko": "📊", "en": "📊"},
+    "tab_m.screener": {"ko": "🔎", "en": "🔎"},
+    "tab_m.guru": {"ko": "🏦", "en": "🏦"},
+    "tab_m.portfolio": {"ko": "💼", "en": "💼"},
+    "tab_m.backtest": {"ko": "📈", "en": "📈"},
+    "tab_m.admin": {"ko": "👑", "en": "👑"},
+
     # ── Sub-tabs ─────────────────────────────────────────
     "subtab.valuation": {"ko": "📈 Valuation", "en": "📈 Valuation"},
     "subtab.quality": {"ko": "🏅 Quality", "en": "🏅 Quality"},
@@ -76,6 +84,16 @@ _STRINGS: Dict[str, Dict[str, str]] = {
     "subtab.macro": {"ko": "🌍 Macro", "en": "🌍 Macro"},
     "subtab.sector": {"ko": "🏭 Sector", "en": "🏭 Sector"},
     "subtab.ai_report": {"ko": "🤖 AI 리포트", "en": "🤖 AI Report"},
+
+    # ── Sub-tabs (mobile icon-only) ──────────────────────
+    "subtab_m.valuation": {"ko": "📈", "en": "📈"},
+    "subtab_m.quality": {"ko": "🏅", "en": "🏅"},
+    "subtab_m.financials": {"ko": "💰", "en": "💰"},
+    "subtab_m.smart_money": {"ko": "🧠", "en": "🧠"},
+    "subtab_m.risk_quant": {"ko": "⚡", "en": "⚡"},
+    "subtab_m.macro": {"ko": "🌍", "en": "🌍"},
+    "subtab_m.sector": {"ko": "🏭", "en": "🏭"},
+    "subtab_m.ai_report": {"ko": "🤖", "en": "🤖"},
 
     # ── Spinner / Status ─────────────────────────────────
     "spinner.fetching": {"ko": "📡 {ticker} 데이터 수집 중...", "en": "📡 Fetching {ticker} data..."},

@@ -1,9 +1,7 @@
 """
-Chart generation module — all matplotlib/plotly charts for the Streamlit app.
+Chart generation module — all Plotly charts for the Streamlit app.
 """
 
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -30,22 +28,12 @@ COLORS = {
 }
 
 
-def style_fig(fig, ax):
-    """Apply consistent styling to matplotlib figures."""
-    fig.patch.set_facecolor("white")
-    ax.set_facecolor("white")
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.tick_params(labelsize=9)
-    return fig, ax
-
-
 # ═══════════════════════════════════════════════════════════
 # FINANCIALS CHARTS
 # ═══════════════════════════════════════════════════════════
 
-def chart_revenue_profit(data: Dict[str, Any], currency: str = "USD") -> Optional[plt.Figure]:
-    """Revenue & Operating Income 5-year bar chart."""
+def chart_revenue_profit(data: Dict[str, Any], currency: str = "USD") -> Optional[go.Figure]:
+    """Revenue & Operating Income 5-year bar chart (Plotly)."""
     from src.fetcher.yahoo import get_stmt_series
 
     inc = data.get("income_stmt")
@@ -58,44 +46,44 @@ def chart_revenue_profit(data: Dict[str, Any], currency: str = "USD") -> Optiona
     if rev_s is None:
         return None
 
-    fig, ax1 = plt.subplots(figsize=(8, 4))
-    style_fig(fig, ax1)
-
     years = [str(d)[:4] for d in rev_s.index]
-    x = np.arange(len(years))
-    w = 0.35
-
     _sym = get_currency_symbol(currency)
     if currency == "KRW":
         _divisor = 1e12
         _unit_label = "조원"
-        _tick_fmt = lambda x, _: f"{x:.1f}조"
     else:
         _divisor = 1e9
         _unit_label = f"Billions ({_sym})"
-        _tick_fmt = lambda x, _: f"{_sym}{x:.1f}B"
 
     rev_vals = rev_s.values / _divisor
-    ax1.bar(x - w / 2, rev_vals, w, label="Revenue", color=COLORS["revenue"], alpha=0.8)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=years, y=rev_vals, name="Revenue",
+        marker_color=COLORS["revenue"], opacity=0.8,
+    ))
 
     if ebit_s is not None and len(ebit_s) == len(rev_s):
         ebit_vals = ebit_s.values / _divisor
         colors = [COLORS["profit"] if v >= 0 else COLORS["loss"] for v in ebit_vals]
-        ax1.bar(x + w / 2, ebit_vals, w, label="Operating Income", color=colors, alpha=0.8)
+        fig.add_trace(go.Bar(
+            x=years, y=ebit_vals, name="Operating Income",
+            marker_color=colors, opacity=0.8,
+        ))
 
-    ax1.set_xlabel("")
-    ax1.set_ylabel(_unit_label)
-    ax1.set_title("Revenue & Operating Income", fontsize=12, fontweight="bold")
-    ax1.set_xticks(x)
-    ax1.set_xticklabels(years)
-    ax1.legend(loc="upper left", fontsize=8)
-    ax1.yaxis.set_major_formatter(mticker.FuncFormatter(_tick_fmt))
-    fig.tight_layout()
+    fig.update_layout(
+        title=dict(text="Revenue & Operating Income", font=dict(size=14)),
+        yaxis_title=_unit_label,
+        barmode="group",
+        height=350,
+        margin=dict(l=40, r=20, t=40, b=30),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
     return fig
 
 
-def chart_margins(data: Dict[str, Any]) -> Optional[plt.Figure]:
-    """Margin trends — Gross, Operating, Net."""
+def chart_margins(data: Dict[str, Any]) -> Optional[go.Figure]:
+    """Margin trends — Gross, Operating, Net (Plotly)."""
     from src.fetcher.yahoo import get_stmt_series
 
     inc = data.get("income_stmt")
@@ -110,34 +98,45 @@ def chart_margins(data: Dict[str, Any]) -> Optional[plt.Figure]:
     if rev_s is None or gp_s is None:
         return None
 
-    fig, ax = plt.subplots(figsize=(8, 4))
-    style_fig(fig, ax)
-
     years = [str(d)[:4] for d in rev_s.index]
 
     def margin(num, denom):
         return (num.values / denom.values * 100) if len(num) == len(denom) else None
 
+    fig = go.Figure()
+
     gm = margin(gp_s, rev_s)
     if gm is not None:
-        ax.plot(years, gm, "o-", label="Gross Margin", color="#1976D2", linewidth=2)
+        fig.add_trace(go.Scatter(
+            x=years, y=gm, mode="lines+markers", name="Gross Margin",
+            line=dict(color="#1976D2", width=2), marker=dict(size=6),
+        ))
 
     if ebit_s is not None:
         om = margin(ebit_s, rev_s)
         if om is not None:
-            ax.plot(years, om, "s-", label="Operating Margin", color="#4CAF50", linewidth=2)
+            fig.add_trace(go.Scatter(
+                x=years, y=om, mode="lines+markers", name="Operating Margin",
+                line=dict(color="#4CAF50", width=2), marker=dict(size=6, symbol="square"),
+            ))
 
     if ni_s is not None:
         nm = margin(ni_s, rev_s)
         if nm is not None:
-            ax.plot(years, nm, "^-", label="Net Margin", color="#FF9800", linewidth=2)
+            fig.add_trace(go.Scatter(
+                x=years, y=nm, mode="lines+markers", name="Net Margin",
+                line=dict(color="#FF9800", width=2), marker=dict(size=6, symbol="triangle-up"),
+            ))
 
-    ax.set_ylabel("Margin (%)")
-    ax.set_title("Profitability Margins", fontsize=12, fontweight="bold")
-    ax.legend(fontsize=8)
-    ax.yaxis.set_major_formatter(mticker.PercentFormatter())
-    ax.axhline(y=0, color="gray", linestyle="--", linewidth=0.5)
-    fig.tight_layout()
+    fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+    fig.update_layout(
+        title=dict(text="Profitability Margins", font=dict(size=14)),
+        yaxis_title="Margin (%)",
+        yaxis=dict(ticksuffix="%"),
+        height=350,
+        margin=dict(l=40, r=20, t=40, b=30),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
     return fig
 
 
@@ -147,8 +146,8 @@ def chart_margins(data: Dict[str, Any]) -> Optional[plt.Figure]:
 
 def chart_valuation_comparison(valuation_results: Dict[str, Any],
                                 current_price: float,
-                                currency: str = "USD") -> Optional[plt.Figure]:
-    """Horizontal bar chart — all model fair values vs current price."""
+                                currency: str = "USD") -> Optional[go.Figure]:
+    """Horizontal bar chart — all model fair values vs current price (Plotly)."""
     summary = valuation_results.get("models_summary", [])
     if not summary:
         return None
@@ -167,60 +166,84 @@ def chart_valuation_comparison(valuation_results: Dict[str, Any],
     if not models:
         return None
 
-    fig, ax = plt.subplots(figsize=(8, max(3, len(models) * 0.55)))
-    style_fig(fig, ax)
-
-    y = np.arange(len(models))
-    ax.barh(y, values, color=colors, alpha=0.8, height=0.5)
     _sym = get_currency_symbol(currency)
-    ax.axvline(x=current_price, color=COLORS["current_price"], linestyle="--",
-               linewidth=2, label=f"Current: {_sym}{current_price:,.0f}")
 
-    # Growth-adjusted aggregate fair value line
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=models, x=values, orientation="h",
+        marker_color=colors, opacity=0.8,
+        text=[f"{_sym}{v:,.0f}" for v in values],
+        textposition="outside",
+        textfont=dict(size=10),
+    ))
+
+    fig.add_vline(
+        x=current_price, line_dash="dash", line_color=COLORS["current_price"],
+        line_width=2, annotation_text=f"Current: {_sym}{current_price:,.0f}",
+        annotation_position="top right",
+    )
+
     adj_fv = valuation_results.get("fair_value_adjusted")
     if adj_fv and adj_fv > 0:
-        ax.axvline(x=adj_fv, color="#7B1FA2", linestyle="-",
-                   linewidth=2, alpha=0.8, label=f"Adj. FV: {_sym}{adj_fv:,.0f}")
+        fig.add_vline(
+            x=adj_fv, line_dash="solid", line_color="#7B1FA2",
+            line_width=2, opacity=0.8,
+            annotation_text=f"Adj. FV: {_sym}{adj_fv:,.0f}",
+            annotation_position="bottom right",
+        )
 
-    ax.set_yticks(y)
-    ax.set_yticklabels(models, fontsize=9)
-    ax.set_xlabel(f"Fair Value ({_sym})")
-    ax.set_title("Valuation Model Comparison", fontsize=12, fontweight="bold")
-    ax.legend(fontsize=8, loc="lower right")
-
-    for i, v in enumerate(values):
-        ax.text(v + current_price * 0.02, i, f"{_sym}{v:,.0f}", va="center", fontsize=8)
-
-    fig.tight_layout()
+    fig.update_layout(
+        title=dict(text="Valuation Model Comparison", font=dict(size=14)),
+        xaxis_title=f"Fair Value ({_sym})",
+        height=max(300, len(models) * 40),
+        margin=dict(l=100, r=60, t=40, b=30),
+        yaxis=dict(autorange="reversed"),
+    )
     return fig
 
 
 def chart_monte_carlo(mc_distribution: np.ndarray,
                       current_price: float, fair_value: float,
-                      currency: str = "USD") -> Optional[plt.Figure]:
-    """Monte Carlo DCF distribution histogram."""
+                      currency: str = "USD") -> Optional[go.Figure]:
+    """Monte Carlo DCF distribution histogram (Plotly)."""
     if mc_distribution is None or len(mc_distribution) == 0:
         return None
 
-    fig, ax = plt.subplots(figsize=(8, 4))
-    style_fig(fig, ax)
-
     _sym = get_currency_symbol(currency)
-    ax.hist(mc_distribution, bins=80, color=COLORS["primary"], alpha=0.7, edgecolor="white")
-    ax.axvline(current_price, color=COLORS["current_price"], linestyle="--",
-               linewidth=2, label=f"Current: {_sym}{current_price:,.0f}")
-    ax.axvline(fair_value, color=COLORS["green"], linestyle="-",
-               linewidth=2, label=f"Fair Value: {_sym}{fair_value:,.0f}")
-
     p10 = np.percentile(mc_distribution, 10)
     p90 = np.percentile(mc_distribution, 90)
-    ax.axvspan(p10, p90, alpha=0.1, color="green", label=f"10th-90th: {_sym}{p10:,.0f}-{_sym}{p90:,.0f}")
 
-    ax.set_xlabel(f"Intrinsic Value ({_sym})")
-    ax.set_ylabel("Frequency")
-    ax.set_title("DCF Monte Carlo Simulation (10,000 runs)", fontsize=12, fontweight="bold")
-    ax.legend(fontsize=8)
-    fig.tight_layout()
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=mc_distribution, nbinsx=80,
+        marker_color=COLORS["primary"], opacity=0.7,
+        name="Distribution",
+    ))
+
+    fig.add_vline(
+        x=current_price, line_dash="dash", line_color=COLORS["current_price"],
+        line_width=2, annotation_text=f"Current: {_sym}{current_price:,.0f}",
+        annotation_position="top left",
+    )
+    fig.add_vline(
+        x=fair_value, line_dash="solid", line_color=COLORS["green"],
+        line_width=2, annotation_text=f"Fair Value: {_sym}{fair_value:,.0f}",
+        annotation_position="top right",
+    )
+    fig.add_vrect(
+        x0=p10, x1=p90, fillcolor="green", opacity=0.08,
+        line_width=0, annotation_text=f"10th-90th",
+        annotation_position="top left",
+    )
+
+    fig.update_layout(
+        title=dict(text="DCF Monte Carlo (10,000 runs)", font=dict(size=14)),
+        xaxis_title=f"Intrinsic Value ({_sym})",
+        yaxis_title="Frequency",
+        height=350,
+        margin=dict(l=40, r=20, t=40, b=30),
+        showlegend=False,
+    )
     return fig
 
 
@@ -309,8 +332,8 @@ def chart_quality_radar(data: Dict[str, Any], piotroski: Dict,
 # RISK CHARTS
 # ═══════════════════════════════════════════════════════════
 
-def chart_drawdown(data: Dict[str, Any]) -> Optional[plt.Figure]:
-    """Drawdown area chart."""
+def chart_drawdown(data: Dict[str, Any]) -> Optional[go.Figure]:
+    """Drawdown area chart (Plotly)."""
     history = data.get("history")
     if history is None or len(history) < 100:
         return None
@@ -321,53 +344,85 @@ def chart_drawdown(data: Dict[str, Any]) -> Optional[plt.Figure]:
     rolling_max = cum.cummax()
     dd = (cum / rolling_max - 1) * 100
 
-    fig, ax = plt.subplots(figsize=(8, 3))
-    style_fig(fig, ax)
-
-    ax.fill_between(dd.index, dd.values, 0, color=COLORS["red"], alpha=0.4)
-    ax.plot(dd.index, dd.values, color=COLORS["red"], linewidth=0.8)
-    ax.set_ylabel("Drawdown (%)")
-    ax.set_title("Historical Drawdown", fontsize=12, fontweight="bold")
-    ax.yaxis.set_major_formatter(mticker.PercentFormatter())
-    fig.tight_layout()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=dd.index, y=dd.values,
+        fill="tozeroy", mode="lines",
+        name="Drawdown",
+        line=dict(color=COLORS["red"], width=0.8),
+        fillcolor="rgba(244,67,54,0.3)",
+    ))
+    fig.update_layout(
+        title=dict(text="Historical Drawdown", font=dict(size=14)),
+        yaxis_title="Drawdown (%)",
+        yaxis=dict(ticksuffix="%"),
+        height=280,
+        margin=dict(l=40, r=20, t=40, b=30),
+    )
     return fig
 
 
-def chart_price_with_ma(data: Dict[str, Any]) -> Optional[plt.Figure]:
-    """Price chart with 50/200 MA and Bollinger Bands."""
+def chart_price_with_ma(data: Dict[str, Any]) -> Optional[go.Figure]:
+    """Price chart with 50/200 MA and Bollinger Bands (Plotly)."""
     history = data.get("history")
     if history is None or len(history) < 50:
         return None
 
     close = history["Close"]
 
-    fig, ax = plt.subplots(figsize=(10, 4))
-    style_fig(fig, ax)
+    fig = go.Figure()
 
-    ax.plot(close.index, close.values, color="#333", linewidth=1, label="Price", alpha=0.8)
+    # Price
+    fig.add_trace(go.Scatter(
+        x=close.index, y=close.values,
+        mode="lines", name="Price",
+        line=dict(color="#333", width=1), opacity=0.8,
+    ))
 
+    # 50-MA
     if len(close) >= 50:
         ma50 = close.rolling(50).mean()
-        ax.plot(ma50.index, ma50.values, color=COLORS["primary"],
-                linewidth=1.2, label="50-MA", alpha=0.8)
+        fig.add_trace(go.Scatter(
+            x=ma50.index, y=ma50.values,
+            mode="lines", name="50-MA",
+            line=dict(color=COLORS["primary"], width=1.2), opacity=0.8,
+        ))
 
+    # 200-MA
     if len(close) >= 200:
         ma200 = close.rolling(200).mean()
-        ax.plot(ma200.index, ma200.values, color=COLORS["secondary"],
-                linewidth=1.2, label="200-MA", alpha=0.8)
+        fig.add_trace(go.Scatter(
+            x=ma200.index, y=ma200.values,
+            mode="lines", name="200-MA",
+            line=dict(color=COLORS["secondary"], width=1.2), opacity=0.8,
+        ))
 
     # Bollinger Bands
     sma20 = close.rolling(20).mean()
     std20 = close.rolling(20).std()
     upper = sma20 + 2 * std20
     lower = sma20 - 2 * std20
-    ax.fill_between(upper.index, upper.values, lower.values,
-                    alpha=0.08, color=COLORS["primary"])
 
-    ax.set_ylabel(get_chart_price_label(data.get("currency", "USD")))
-    ax.set_title(f"{data.get('ticker', '')} — Price & Moving Averages", fontsize=12, fontweight="bold")
-    ax.legend(fontsize=8, loc="upper left")
-    fig.tight_layout()
+    fig.add_trace(go.Scatter(
+        x=upper.index, y=upper.values,
+        mode="lines", name="BB Upper",
+        line=dict(width=0), showlegend=False,
+    ))
+    fig.add_trace(go.Scatter(
+        x=lower.index, y=lower.values,
+        mode="lines", name="BB Lower",
+        fill="tonexty", fillcolor=f"rgba(25,118,210,0.06)",
+        line=dict(width=0), showlegend=False,
+    ))
+
+    fig.update_layout(
+        title=dict(text=f"{data.get('ticker', '')} — Price & Moving Averages", font=dict(size=14)),
+        yaxis_title=get_chart_price_label(data.get("currency", "USD")),
+        height=380,
+        margin=dict(l=40, r=20, t=40, b=30),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        hovermode="x unified",
+    )
     return fig
 
 

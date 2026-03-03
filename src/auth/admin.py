@@ -173,11 +173,22 @@ def _render_system_stats(lang: str):
         active = sum(1 for u in users if u.get("is_active", True))
         inactive = total - active
 
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("👥 " + ("전체" if lang == "ko" else "Total"), total)
-        col2.metric("👑 Admin", by_role.get("admin", 0))
-        col3.metric("⭐ Premium", by_role.get("premium", 0))
-        col4.metric("🆓 Free", by_role.get("free", 0))
+        from src.mobile import is_mobile as _is_mobile_fn
+        _admin_mobile = _is_mobile_fn()
+
+        if _admin_mobile:
+            c1, c2 = st.columns(2)
+            c1.metric("👥 " + ("전체" if lang == "ko" else "Total"), total)
+            c2.metric("👑 Admin", by_role.get("admin", 0))
+            c3, c4 = st.columns(2)
+            c3.metric("⭐ Premium", by_role.get("premium", 0))
+            c4.metric("🆓 Free", by_role.get("free", 0))
+        else:
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("👥 " + ("전체" if lang == "ko" else "Total"), total)
+            col2.metric("👑 Admin", by_role.get("admin", 0))
+            col3.metric("⭐ Premium", by_role.get("premium", 0))
+            col4.metric("🆓 Free", by_role.get("free", 0))
 
         st.markdown("---")
         col1, col2 = st.columns(2)

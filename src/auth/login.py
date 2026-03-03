@@ -239,10 +239,26 @@ def render_auth_page():
             color: #666;
             font-size: 14px;
         }
+        @media (max-width: 768px) {
+            .auth-container {
+                margin: 16px auto;
+                padding: 16px;
+                max-width: 100%;
+            }
+            .auth-header h1 {
+                font-size: 22px;
+            }
+        }
     </style>
     """, unsafe_allow_html=True)
 
-    _col1, col_center, _col3 = st.columns([1, 2, 1])
+    # On mobile, use full width; on desktop, center column
+    from src.mobile import is_mobile as _is_mobile_fn
+    _auth_mobile = _is_mobile_fn()
+    if _auth_mobile:
+        col_center = st.container()
+    else:
+        _col1, col_center, _col3 = st.columns([1, 2, 1])
 
     with col_center:
         st.markdown("## 📊 Stock Analyzer")

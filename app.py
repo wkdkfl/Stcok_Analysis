@@ -42,6 +42,7 @@ from src.auth.permissions import (
     require_daily_limit, record_usage, get_daily_usage,
 )
 from src.auth.rate_limit import require_rate_limit
+from src.mobile import init_mobile_detect, is_mobile, mcols, mcols_ratio, render_metrics_grid
 
 # ── Page Config ──────────────────────────────────────────
 st.set_page_config(
@@ -54,6 +55,7 @@ st.set_page_config(
 # ── Custom CSS ───────────────────────────────────────────
 st.markdown("""
 <style>
+    /* ── Base UI Components ─────────────────────────── */
     .metric-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 15px 20px;
@@ -94,42 +96,78 @@ st.markdown("""
     }
     div[data-testid="stMetricValue"] { font-size: 20px; }
 
-    /* ── Mobile Responsive ─────────────────────────── */
+    /* ── Tablet (≤ 768px) ──────────────────────────── */
     @media (max-width: 768px) {
-        .metric-card {
-            padding: 10px 12px;
-        }
+        .metric-card { padding: 10px 12px; }
         .metric-card h3 { font-size: 11px; }
         .metric-card h1 { font-size: 18px; }
-        .signal-box {
-            padding: 10px;
-            font-size: 16px;
-        }
-        .grade-card {
-            padding: 8px 4px;
-            margin: 2px 0;
-        }
+        .signal-box { padding: 10px; font-size: 16px; }
+        .grade-card { padding: 8px 4px; margin: 2px 0; }
         .grade-card .grade-label { font-size: 9px; }
         .grade-card .grade-value { font-size: 16px; }
         .grade-card .grade-score { font-size: 8px; }
         div[data-testid="stMetricValue"] { font-size: 16px; }
-        /* Auto-wrap Streamlit columns on mobile */
         div[data-testid="column"] {
             min-width: 140px !important;
             flex: 1 1 45% !important;
         }
-        /* Reduce main padding */
         .block-container {
             padding-left: 1rem !important;
             padding-right: 1rem !important;
         }
-        /* Smaller tab text */
         button[data-baseweb="tab"] {
             font-size: 12px !important;
             padding: 6px 8px !important;
         }
     }
 
+    /* ── Large Phone (≤ 600px) ─────────────────────── */
+    @media (max-width: 600px) {
+        div[data-testid="column"] {
+            min-width: 45% !important;
+            flex: 1 1 45% !important;
+        }
+        .grade-card {
+            padding: 10px 6px;
+            margin: 3px 1px;
+        }
+        .grade-card .grade-label { font-size: 10px; }
+        .grade-card .grade-value { font-size: 18px; }
+        .grade-card .grade-score { font-size: 9px; }
+        .block-container {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+        /* Increase touch targets for all buttons */
+        button {
+            min-height: 44px !important;
+        }
+        /* Radio button mobile optimization */
+        .stRadio > div {
+            gap: 2px !important;
+        }
+        .stRadio > div > label {
+            padding: 8px 10px !important;
+            font-size: 14px !important;
+        }
+        /* Let Plotly charts use full bleed width */
+        [data-testid="stPlotlyChart"] {
+            margin-left: -0.5rem;
+            margin-right: -0.5rem;
+        }
+        /* Touch-friendly dataframe scrolling */
+        [data-testid="stDataFrame"] {
+            -webkit-overflow-scrolling: touch;
+        }
+        /* Sub-tab buttons smaller */
+        button[data-baseweb="tab"] {
+            font-size: 11px !important;
+            padding: 6px 6px !important;
+            min-height: 36px !important;
+        }
+    }
+
+    /* ── Small Phone (≤ 480px) ─────────────────────── */
     @media (max-width: 480px) {
         div[data-testid="column"] {
             min-width: 100% !important;
@@ -156,6 +194,10 @@ if not render_auth_page():
     st.stop()
 
 # User is authenticated from this point
+
+# ── Mobile Detection ─────────────────────────────────────
+init_mobile_detect()
+_mobile = is_mobile()
 _current_user = get_current_user()
 
 # ═══════════════════════════════════════════════════════════
@@ -574,17 +616,27 @@ def display_single_ticker(results: dict):
     _cur = data.get("currency", "USD")
 
     # ── Header ───────────────────────────────────────────
-    col1, col2, col3 = st.columns([3, 1, 1])
-    with col1:
+    if _mobile:
         st.markdown(f"## {data['name']} ({data['ticker']})")
         st.caption(f"{data['sector']} · {data['industry']} · {data['country']}")
-    with col2:
+        _hcols = st.columns(2)
         price = data.get("current_price", 0)
-        st.metric("Current Price", format_price(price, _cur))
-    with col3:
+        _hcols[0].metric("Current Price", format_price(price, _cur))
         mc = data.get("market_cap")
         if mc:
-            st.metric("Market Cap", format_market_cap(mc, _cur))
+            _hcols[1].metric("Market Cap", format_market_cap(mc, _cur))
+    else:
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            st.markdown(f"## {data['name']} ({data['ticker']})")
+            st.caption(f"{data['sector']} · {data['industry']} · {data['country']}")
+        with col2:
+            price = data.get("current_price", 0)
+            st.metric("Current Price", format_price(price, _cur))
+        with col3:
+            mc = data.get("market_cap")
+            if mc:
+                st.metric("Market Cap", format_market_cap(mc, _cur))
 
     # ── Signal Banner ────────────────────────────────────
     grades = results.get("grades", {})
@@ -599,57 +651,92 @@ def display_single_ticker(results: dict):
     fv_range = valuation.get("fair_value_range")
 
     from src.tooltips import tip
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
+    _sig_cols = st.columns(2) if _mobile else st.columns(4)
+    with _sig_cols[0]:
         st.markdown(
             f'<div class="signal-box" style="background-color: {signal_color}; color: white;">'
             f'{signal}</div>',
             unsafe_allow_html=True,
         )
-    with col2:
+    with _sig_cols[1]:
         st.metric("Overall Grade", f"{overall_grade} ({overall_score:.0f}점)",
                   help=tip("grade.overall"))
-    with col3:
-        if fair_value_adj:
-            growth_label = ""
-            if growth_adj_pct and abs(growth_adj_pct) >= 0.1:
-                sign = "+" if growth_adj_pct > 0 else ""
-                growth_label = f" (Growth {sign}{growth_adj_pct:.1f}%)"
-            st.metric(f"Fair Value (종합){growth_label}",
-                      format_price(fair_value_adj, _cur),
-                      delta=f"{upside:+.1f}%" if upside else None)
-    with col4:
-        if fv_range:
-            st.metric("Fair Value Range (IQR)",
-                      f"{format_price(fv_range[0], _cur)} - {format_price(fv_range[1], _cur)}")
+    if _mobile:
+        _sig_cols2 = st.columns(2)
+        with _sig_cols2[0]:
+            if fair_value_adj:
+                growth_label = ""
+                if growth_adj_pct and abs(growth_adj_pct) >= 0.1:
+                    sign = "+" if growth_adj_pct > 0 else ""
+                    growth_label = f" (Growth {sign}{growth_adj_pct:.1f}%)"
+                st.metric(f"Fair Value{growth_label}",
+                          format_price(fair_value_adj, _cur),
+                          delta=f"{upside:+.1f}%" if upside else None)
+        with _sig_cols2[1]:
+            if fv_range:
+                st.metric("FV Range (IQR)",
+                          f"{format_price(fv_range[0], _cur)} - {format_price(fv_range[1], _cur)}")
+    else:
+        with _sig_cols[2]:
+            if fair_value_adj:
+                growth_label = ""
+                if growth_adj_pct and abs(growth_adj_pct) >= 0.1:
+                    sign = "+" if growth_adj_pct > 0 else ""
+                    growth_label = f" (Growth {sign}{growth_adj_pct:.1f}%)"
+                st.metric(f"Fair Value (종합){growth_label}",
+                          format_price(fair_value_adj, _cur),
+                          delta=f"{upside:+.1f}%" if upside else None)
+        with _sig_cols[3]:
+            if fv_range:
+                st.metric("Fair Value Range (IQR)",
+                          f"{format_price(fv_range[0], _cur)} - {format_price(fv_range[1], _cur)}")
 
     # ── Category Grade Cards (7 cards in a row) ──────────
     from src.grading.category_grades import CATEGORY_LABELS
     cats = grades.get("categories", {})
     if cats:
-        grade_cols = st.columns(7)
         cat_order = ["valuation", "quality", "financial", "smart_money",
                      "risk_quant", "macro", "sector"]
-        for col, key in zip(grade_cols, cat_order):
-            c = cats.get(key, {})
-            g = c.get("grade", "N/A")
-            s = c.get("score", 0)
-            clr = c.get("color", "#9E9E9E")
-            label = CATEGORY_LABELS.get(key, key)
-            with col:
-                st.markdown(
-                    f'<div class="grade-card" style="background-color: {clr};">'
-                    f'<p class="grade-label">{label}</p>'
-                    f'<p class="grade-value">{g}</p>'
-                    f'<p class="grade-score">{s:.0f}/100</p>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+        if _mobile:
+            # Two rows: 4 + 3
+            for row_keys in [cat_order[:4], cat_order[4:]]:
+                _gc = st.columns(len(row_keys))
+                for col, key in zip(_gc, row_keys):
+                    c = cats.get(key, {})
+                    g = c.get("grade", "N/A")
+                    s = c.get("score", 0)
+                    clr = c.get("color", "#9E9E9E")
+                    label = CATEGORY_LABELS.get(key, key)
+                    with col:
+                        st.markdown(
+                            f'<div class="grade-card" style="background-color: {clr};">'
+                            f'<p class="grade-label">{label}</p>'
+                            f'<p class="grade-value">{g}</p>'
+                            f'<p class="grade-score">{s:.0f}/100</p>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+        else:
+            grade_cols = st.columns(7)
+            for col, key in zip(grade_cols, cat_order):
+                c = cats.get(key, {})
+                g = c.get("grade", "N/A")
+                s = c.get("score", 0)
+                clr = c.get("color", "#9E9E9E")
+                label = CATEGORY_LABELS.get(key, key)
+                with col:
+                    st.markdown(
+                        f'<div class="grade-card" style="background-color: {clr};">'
+                        f'<p class="grade-label">{label}</p>'
+                        f'<p class="grade-value">{g}</p>'
+                        f'<p class="grade-score">{s:.0f}/100</p>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
 
     st.markdown("---")
 
     # ── KPI Cards ────────────────────────────────────────
-    kpi_cols = st.columns(6)
     kpi_data = [
         ("P/E", data.get("trailing_pe"), ".1f"),
         ("Fwd P/E", data.get("forward_pe"), ".1f"),
@@ -658,7 +745,8 @@ def display_single_ticker(results: dict):
         ("Div Yield", f"{(data.get('dividend_yield') or 0)*100:.1f}%", "s"),
         ("Beta", data.get("beta"), ".2f"),
     ]
-    for col, (label, val, fmt) in zip(kpi_cols, kpi_data):
+
+    def _render_kpi(col, label, val, fmt):
         with col:
             if val is not None:
                 display_val = val if fmt == "s" else f"{val:{fmt}}"
@@ -666,12 +754,22 @@ def display_single_ticker(results: dict):
             else:
                 st.metric(label, "N/A")
 
+    if _mobile:
+        for row in [kpi_data[:3], kpi_data[3:]]:
+            _kc = st.columns(3)
+            for col, (label, val, fmt) in zip(_kc, row):
+                _render_kpi(col, label, val, fmt)
+    else:
+        kpi_cols = st.columns(6)
+        for col, (label, val, fmt) in zip(kpi_cols, kpi_data):
+            _render_kpi(col, label, val, fmt)
+
     # ── Tabs ─────────────────────────────────────────────
-    tabs = st.tabs([
-        "📈 Valuation", "🏅 Quality", "💰 Financials",
-        "🧠 Smart Money", "⚡ Risk & Quant",
-        "🌍 Macro", "🏭 Sector", "🤖 AI 리포트"
-    ])
+    _stab_prefix = "subtab_m" if _mobile else "subtab"
+    _stab_keys = ["valuation", "quality", "financials", "smart_money",
+                  "risk_quant", "macro", "sector", "ai_report"]
+    _stab_labels = [t(f"{_stab_prefix}.{k}") for k in _stab_keys]
+    tabs = st.tabs(_stab_labels)
 
     # ──────────── TAB: VALUATION ─────────────────────────
     with tabs[0]:
@@ -895,20 +993,33 @@ def _render_valuation_tab(results: dict):
         st.dataframe(df, use_container_width=True, hide_index=True)
 
     # Charts side by side
-    col1, col2 = st.columns(2)
-    with col1:
+    if _mobile:
         fig = chart_valuation_comparison(valuation, current_price, _cur)
         if fig:
-            st.pyplot(fig)
+            st.plotly_chart(fig, use_container_width=True)
 
-    with col2:
         dcf_result = valuation.get("models", {}).get("dcf", {})
         mc_dist = dcf_result.get("mc_distribution")
         fv = dcf_result.get("fair_value") or valuation.get("fair_value") or 0
         if mc_dist is not None and len(mc_dist) > 0:
             fig_mc = chart_monte_carlo(mc_dist, current_price, fv, _cur)
             if fig_mc:
-                st.pyplot(fig_mc)
+                st.plotly_chart(fig_mc, use_container_width=True)
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            fig = chart_valuation_comparison(valuation, current_price, _cur)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            dcf_result = valuation.get("models", {}).get("dcf", {})
+            mc_dist = dcf_result.get("mc_distribution")
+            fv = dcf_result.get("fair_value") or valuation.get("fair_value") or 0
+            if mc_dist is not None and len(mc_dist) > 0:
+                fig_mc = chart_monte_carlo(mc_dist, current_price, fv, _cur)
+                if fig_mc:
+                    st.plotly_chart(fig_mc, use_container_width=True)
 
     # Reverse DCF
     st.subheader("Reverse DCF — 시장 내재 기대치")
@@ -926,20 +1037,29 @@ def _render_valuation_tab(results: dict):
     with st.expander("DCF 상세 파라미터"):
         dcf_details = dcf_result.get("details", {})
         if dcf_details:
-            cols = st.columns(4)
+            _dcf_ncols = 2 if _mobile else 4
+            cols = st.columns(_dcf_ncols)
             items = list(dcf_details.items())
             for i, (k, v) in enumerate(items):
-                with cols[i % 4]:
+                with cols[i % _dcf_ncols]:
                     st.metric(k.replace("_", " ").title(), f"{v}")
 
         # MC stats
         if dcf_result.get("mc_p10"):
             st.markdown("**Monte Carlo Summary**")
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("10th Percentile", format_price(dcf_result['mc_p10'], _cur))
-            c2.metric("Median", format_price(dcf_result.get('mc_median', 0), _cur))
-            c3.metric("Mean", format_price(dcf_result.get('mc_mean', 0), _cur))
-            c4.metric("90th Percentile", format_price(dcf_result['mc_p90'], _cur))
+            if _mobile:
+                _mc1, _mc2 = st.columns(2)
+                _mc1.metric("10th Pctl", format_price(dcf_result['mc_p10'], _cur))
+                _mc2.metric("Median", format_price(dcf_result.get('mc_median', 0), _cur))
+                _mc3, _mc4 = st.columns(2)
+                _mc3.metric("Mean", format_price(dcf_result.get('mc_mean', 0), _cur))
+                _mc4.metric("90th Pctl", format_price(dcf_result['mc_p90'], _cur))
+            else:
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("10th Percentile", format_price(dcf_result['mc_p10'], _cur))
+                c2.metric("Median", format_price(dcf_result.get('mc_median', 0), _cur))
+                c3.metric("Mean", format_price(dcf_result.get('mc_mean', 0), _cur))
+                c4.metric("90th Percentile", format_price(dcf_result['mc_p90'], _cur))
 
 
 def _render_quality_tab(results: dict):
@@ -964,9 +1084,8 @@ def _render_quality_tab(results: dict):
             st.markdown(tip(key))
             st.markdown("---")
 
-    col_left, col_right = st.columns([1, 1])
-
-    with col_left:
+    if _mobile:
+        # Stacked layout on mobile
         # Piotroski F-Score
         st.markdown(f"### Piotroski F-Score: {piotroski['score']}/9 ({piotroski['grade']})")
         for signal_name, passed, value in piotroski.get("signals", []):
@@ -984,7 +1103,6 @@ def _render_quality_tab(results: dict):
         st.markdown(f"### Beneish M-Score: {beneish.get('m_score', 'N/A')}")
         st.caption(f"Manipulation Risk: {beneish.get('manipulation_risk', 'N/A')}")
 
-    with col_right:
         # Radar chart
         fig = chart_quality_radar(data, piotroski, altman, eva)
         if fig:
@@ -1006,6 +1124,49 @@ def _render_quality_tab(results: dict):
             st.caption(f"Accrual Ratio: {ar:.4f}")
         if ccr is not None:
             st.caption(f"Cash Conversion Ratio: {ccr:.2f}")
+    else:
+        col_left, col_right = st.columns([1, 1])
+
+        with col_left:
+            # Piotroski F-Score
+            st.markdown(f"### Piotroski F-Score: {piotroski['score']}/9 ({piotroski['grade']})")
+            for signal_name, passed, value in piotroski.get("signals", []):
+                icon = "✅" if passed else "❌"
+                val_str = f" ({value})" if value is not None else ""
+                st.markdown(f"{icon} {signal_name}{val_str}")
+
+            # Altman Z-Score
+            st.markdown(f"### Altman Z-Score: {altman.get('z_score', 'N/A')} ({altman.get('zone', 'N/A')})")
+            if altman.get("components"):
+                for k, v in altman["components"].items():
+                    st.caption(f"  {k}: {v}")
+
+            # Beneish M-Score
+            st.markdown(f"### Beneish M-Score: {beneish.get('m_score', 'N/A')}")
+            st.caption(f"Manipulation Risk: {beneish.get('manipulation_risk', 'N/A')}")
+
+        with col_right:
+            # Radar chart
+            fig = chart_quality_radar(data, piotroski, altman, eva)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+
+            # EVA & ROIC
+            st.markdown("### EVA & ROIC Spread")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("ROIC", f"{eva.get('roic', 'N/A')}%")
+            c2.metric("WACC", f"{eva.get('wacc', 'N/A')}%")
+            c3.metric("Spread", f"{eva.get('spread', 'N/A')}%")
+            st.caption(eva.get("verdict", ""))
+
+            # Earnings Quality
+            st.markdown(f"### Earnings Quality: {eq.get('earnings_quality', 'N/A')}")
+            ar = data.get("accrual_ratio")
+            ccr = data.get("cash_conversion")
+            if ar is not None:
+                st.caption(f"Accrual Ratio: {ar:.4f}")
+            if ccr is not None:
+                st.caption(f"Cash Conversion Ratio: {ccr:.2f}")
 
     # DuPont
     with st.expander("DuPont 5-Factor Decomposition"):
@@ -1026,15 +1187,23 @@ def _render_financials_tab(results: dict):
     _divisor = 1e8 if _cur == "KRW" else 1e6
 
     # Charts
-    col1, col2 = st.columns(2)
-    with col1:
+    if _mobile:
         fig = chart_revenue_profit(data, _cur)
         if fig:
-            st.pyplot(fig)
-    with col2:
+            st.plotly_chart(fig, use_container_width=True)
         fig = chart_margins(data)
         if fig:
-            st.pyplot(fig)
+            st.plotly_chart(fig, use_container_width=True)
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            fig = chart_revenue_profit(data, _cur)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
+        with col2:
+            fig = chart_margins(data)
+            if fig:
+                st.plotly_chart(fig, use_container_width=True)
 
     # Financial statements
     sub_tabs = st.tabs(["Income Statement", "Balance Sheet", "Cash Flow"])
@@ -1077,9 +1246,10 @@ def _render_financials_tab(results: dict):
             "Interest Coverage": f"{data.get('interest_coverage') or 'N/A'}",
             "Net Debt/EBITDA": f"{data.get('net_debt_to_ebitda') or 'N/A'}",
         }
-        cols = st.columns(5)
+        _rat_ncols = 3 if _mobile else 5
+        cols = st.columns(_rat_ncols)
         for i, (k, v) in enumerate(ratios.items()):
-            with cols[i % 5]:
+            with cols[i % _rat_ncols]:
                 st.metric(k, v)
 
 
@@ -1116,18 +1286,15 @@ def _render_smart_money_tab(results: dict):
     st.markdown("---")
 
     # ── Smart Money Signals ─────────────────────────
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # Insider
+    if _mobile:
+        # Stacked on mobile
         ins = sm["insider"]
-        st.subheader(f"👤 Insider Transactions — {ins['signal']}")
+        st.subheader(f"👤 Insider — {ins['signal']}")
         st.caption(ins.get("net_signal", ""))
         c1, c2 = st.columns(2)
         c1.metric("Recent Buys", ins.get("recent_buys", 0))
         c2.metric("Recent Sells", ins.get("recent_sells", 0))
 
-        # Short Interest
         si = sm["short_interest"]
         st.subheader(f"📉 Short Interest — {si['signal']}")
         c1, c2 = st.columns(2)
@@ -1137,8 +1304,6 @@ def _render_smart_money_tab(results: dict):
         c2.metric("Short Ratio (DTC)", si.get("short_ratio", "N/A"))
         st.caption(f"Risk Level: {si.get('risk_level', 'N/A')}")
 
-    with col2:
-        # Institutional
         inst = sm["institutional"]
         st.subheader("🏛️ Institutional Ownership")
         c1, c2 = st.columns(2)
@@ -1152,12 +1317,54 @@ def _render_smart_money_tab(results: dict):
                 df = pd.DataFrame(inst["top_holders"])
                 st.dataframe(df, use_container_width=True, hide_index=True)
 
-        # Buyback
         bb = sm["buyback"]
         st.subheader(f"🔄 Buyback — {bb['signal']}")
         c1, c2 = st.columns(2)
         c1.metric("Buyback Yield", f"{bb.get('buyback_yield', 'N/A')}%")
         c2.metric("Total Shareholder Yield", f"{bb.get('total_shareholder_yield', 'N/A')}%")
+    else:
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Insider
+            ins = sm["insider"]
+            st.subheader(f"👤 Insider Transactions — {ins['signal']}")
+            st.caption(ins.get("net_signal", ""))
+            c1, c2 = st.columns(2)
+            c1.metric("Recent Buys", ins.get("recent_buys", 0))
+            c2.metric("Recent Sells", ins.get("recent_sells", 0))
+
+            # Short Interest
+            si = sm["short_interest"]
+            st.subheader(f"📉 Short Interest — {si['signal']}")
+            c1, c2 = st.columns(2)
+            spf = si.get("short_pct_float")
+            c1.metric("Short % Float",
+                       f"{spf*100:.1f}%" if spf and isinstance(spf, (int, float)) else "N/A")
+            c2.metric("Short Ratio (DTC)", si.get("short_ratio", "N/A"))
+            st.caption(f"Risk Level: {si.get('risk_level', 'N/A')}")
+
+        with col2:
+            # Institutional
+            inst = sm["institutional"]
+            st.subheader("🏛️ Institutional Ownership")
+            c1, c2 = st.columns(2)
+            pct_inst = inst.get("pct_institutions")
+            pct_ins = inst.get("pct_insiders")
+            c1.metric("Institutions", f"{pct_inst*100:.1f}%" if pct_inst else "N/A")
+            c2.metric("Insiders", f"{pct_ins*100:.1f}%" if pct_ins else "N/A")
+
+            if inst.get("top_holders"):
+                with st.expander("Top 10 Institutional Holders"):
+                    df = pd.DataFrame(inst["top_holders"])
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+
+            # Buyback
+            bb = sm["buyback"]
+            st.subheader(f"🔄 Buyback — {bb['signal']}")
+            c1, c2 = st.columns(2)
+            c1.metric("Buyback Yield", f"{bb.get('buyback_yield', 'N/A')}%")
+            c2.metric("Total Shareholder Yield", f"{bb.get('total_shareholder_yield', 'N/A')}%")
 
 
 def _render_risk_quant_tab(results: dict):
@@ -1172,36 +1379,42 @@ def _render_risk_quant_tab(results: dict):
     risk = results["risk"]
     quant = results["quant"]
 
-    col1, col2 = st.columns(2)
-
-    with col1:
+    def _render_risk_section():
         st.subheader(f"⚠️ Risk: {risk.get('overall_risk', 'N/A')}")
 
-        # Return metrics
         rm = risk["return_metrics"]
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Sharpe", rm.get("sharpe_ratio", "N/A"))
-        c2.metric("Sortino", rm.get("sortino_ratio", "N/A"))
-        c3.metric("Max DD", f"{rm.get('max_drawdown', 'N/A')}%")
-        c4.metric("Ann. Vol", f"{rm.get('annual_volatility', 'N/A')}%")
+        _rm_cols = 2 if _mobile else 4
+        _rc = st.columns(_rm_cols)
+        _rc[0].metric("Sharpe", rm.get("sharpe_ratio", "N/A"))
+        _rc[1].metric("Sortino", rm.get("sortino_ratio", "N/A"))
+        if _mobile:
+            _rc2 = st.columns(2)
+            _rc2[0].metric("Max DD", f"{rm.get('max_drawdown', 'N/A')}%")
+            _rc2[1].metric("Ann. Vol", f"{rm.get('annual_volatility', 'N/A')}%")
+        else:
+            _rc[2].metric("Max DD", f"{rm.get('max_drawdown', 'N/A')}%")
+            _rc[3].metric("Ann. Vol", f"{rm.get('annual_volatility', 'N/A')}%")
 
-        # VaR
         var = risk["var"]
         c1, c2, c3 = st.columns(3)
         c1.metric("VaR 95%", f"{var.get('var_95', 'N/A')}%")
         c2.metric("VaR 99%", f"{var.get('var_99', 'N/A')}%")
         c3.metric("CVaR 95%", f"{var.get('cvar_95', 'N/A')}%")
 
-        # Leverage
         lev = risk["leverage"]
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("D/E", lev.get("debt_to_equity", "N/A"))
-        c2.metric("ND/EBITDA", lev.get("net_debt_to_ebitda", "N/A"))
-        c3.metric("Int Coverage", lev.get("interest_coverage", "N/A"))
-        c4.metric("Unlev Beta", lev.get("unlevered_beta", "N/A"))
+        _lev_cols = 2 if _mobile else 4
+        _lc = st.columns(_lev_cols)
+        _lc[0].metric("D/E", lev.get("debt_to_equity", "N/A"))
+        _lc[1].metric("ND/EBITDA", lev.get("net_debt_to_ebitda", "N/A"))
+        if _mobile:
+            _lc2 = st.columns(2)
+            _lc2[0].metric("Int Coverage", lev.get("interest_coverage", "N/A"))
+            _lc2[1].metric("Unlev Beta", lev.get("unlevered_beta", "N/A"))
+        else:
+            _lc[2].metric("Int Coverage", lev.get("interest_coverage", "N/A"))
+            _lc[3].metric("Unlev Beta", lev.get("unlevered_beta", "N/A"))
 
-    with col2:
-        # Quant signals
+    def _render_quant_section():
         st.subheader(f"📊 Technical: {quant.get('overall_signal', 'Neutral')}")
 
         mom = quant["momentum"]
@@ -1216,7 +1429,6 @@ def _render_risk_quant_tab(results: dict):
         c2.metric("Bollinger %", tech.get("bollinger_position", "N/A"))
         c3.metric("52W Position", f"{tech.get('fifty_two_week_proximity', 'N/A')}%")
 
-        # Special flags
         flags = []
         if tech.get("golden_cross"):
             flags.append("🟢 Golden Cross detected")
@@ -1227,19 +1439,28 @@ def _render_risk_quant_tab(results: dict):
         for f in flags:
             st.caption(f)
 
-        # Earnings momentum
         sue = quant["earnings_momentum"]
         if sue.get("sue_score") is not None:
             st.metric("SUE Score", sue["sue_score"])
 
+    if _mobile:
+        _render_risk_section()
+        _render_quant_section()
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            _render_risk_section()
+        with col2:
+            _render_quant_section()
+
     # Charts
     fig_price = chart_price_with_ma(data)
     if fig_price:
-        st.pyplot(fig_price)
+        st.plotly_chart(fig_price, use_container_width=True)
 
     fig_dd = chart_drawdown(data)
     if fig_dd:
-        st.pyplot(fig_dd)
+        st.plotly_chart(fig_dd, use_container_width=True)
 
 
 def _render_macro_tab(results: dict):
@@ -1258,9 +1479,8 @@ def _render_macro_tab(results: dict):
     st.markdown(f"**{macro.get('summary', '')}**")
     st.info(macro.get("implication", ""))
 
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
+    if _mobile:
+        # Stacked on mobile
         st.markdown("### Yield Curve")
         yc = macro["yield_curve"]
         c1, c2, c3 = st.columns(3)
@@ -1270,7 +1490,6 @@ def _render_macro_tab(results: dict):
         if yc.get("inverted"):
             st.error("⚠️ 수익률곡선 역전!")
 
-    with col2:
         st.markdown("### Credit & ERP")
         cr = macro["credit"]
         st.metric("HY Spread", f"{cr.get('hy_spread', 'N/A')}")
@@ -1279,7 +1498,6 @@ def _render_macro_tab(results: dict):
         st.metric("Equity Risk Premium", f"{erp.get('erp', 'N/A')}%")
         st.caption(erp.get("assessment", ""))
 
-    with col3:
         st.markdown("### VIX & Cycle")
         vx = macro["vix"]
         st.metric("VIX", vx.get("level", "N/A"))
@@ -1292,6 +1510,41 @@ def _render_macro_tab(results: dict):
             st.success("이 종목의 섹터는 현재 순풍 ↗")
         elif sr.get("favorable") is False:
             st.warning("이 종목의 섹터는 현재 역풍 ↘")
+    else:
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.markdown("### Yield Curve")
+            yc = macro["yield_curve"]
+            c1, c2, c3 = st.columns(3)
+            c1.metric("10Y", f"{yc.get('treasury_10y', 'N/A')}%")
+            c2.metric("2Y", f"{yc.get('treasury_2y', 'N/A')}%")
+            c3.metric("Spread", f"{yc.get('spread', 'N/A')}%")
+            if yc.get("inverted"):
+                st.error("⚠️ 수익률곡선 역전!")
+
+        with col2:
+            st.markdown("### Credit & ERP")
+            cr = macro["credit"]
+            st.metric("HY Spread", f"{cr.get('hy_spread', 'N/A')}")
+            st.caption(f"Credit Regime: {cr.get('regime', 'N/A')}")
+            erp = macro["erp"]
+            st.metric("Equity Risk Premium", f"{erp.get('erp', 'N/A')}%")
+            st.caption(erp.get("assessment", ""))
+
+        with col3:
+            st.markdown("### VIX & Cycle")
+            vx = macro["vix"]
+            st.metric("VIX", vx.get("level", "N/A"))
+            st.caption(f"Regime: {vx.get('regime', 'N/A')}")
+
+            sr = macro["sector_rotation"]
+            if sr.get("cycle_phase"):
+                st.metric("Business Cycle", sr["cycle_phase"])
+            if sr.get("favorable") is True:
+                st.success("이 종목의 섹터는 현재 순풍 ↗")
+            elif sr.get("favorable") is False:
+                st.warning("이 종목의 섹터는 현재 역풍 ↘")
 
     # Sector rotation table
     ranking = macro.get("sector_rotation", {}).get("sector_ranking", {})
@@ -1315,12 +1568,13 @@ def _render_sector_tab(results: dict):
         st.caption("이 섹터에 대한 추가 지표가 없습니다.")
         return
 
-    cols = st.columns(min(len(metrics), 4))
+    _sec_ncols = min(len(metrics), 2) if _mobile else min(len(metrics), 4)
+    cols = st.columns(_sec_ncols)
     for i, (k, v) in enumerate(metrics.items()):
         if k == "note":
             st.caption(f"ℹ️ {v}")
             continue
-        with cols[i % min(len(metrics), 4)]:
+        with cols[i % _sec_ncols]:
             label = k.replace("_", " ").title()
             if isinstance(v, bool):
                 st.metric(label, "✅" if v else "❌")
@@ -1432,34 +1686,63 @@ def _render_guru_top5_section():
     if top5_data:
         from src.grading.screener_grades import GRADE_COLORS
 
-        # ── Card layout: 5 columns ──
-        cols = st.columns(len(top5_data))
-        for col, item in zip(cols, top5_data):
-            g = item.get("grades", {})
-            grade = g.get("overall_grade", "N/A")
-            score = g.get("overall_score", 0)
-            color = GRADE_COLORS.get(grade, "#666")
-            guru_count = item["guru_count"]
-            ticker = item["ticker"]
-            name = (item.get("info") or {}).get("name", item.get("name", ""))
-            if len(name) > 18:
-                name = name[:16] + "…"
+        # ── Card layout: responsive ──
+        if _mobile:
+            # 2+3 row layout on mobile
+            for row_items in [top5_data[:2], top5_data[2:]]:
+                cols = st.columns(len(row_items))
+                for col, item in zip(cols, row_items):
+                    g = item.get("grades", {})
+                    grade = g.get("overall_grade", "N/A")
+                    score = g.get("overall_score", 0)
+                    color = GRADE_COLORS.get(grade, "#666")
+                    guru_count = item["guru_count"]
+                    ticker = item["ticker"]
+                    name = (item.get("info") or {}).get("name", item.get("name", ""))
+                    if len(name) > 18:
+                        name = name[:16] + "…"
+                    val = item.get("total_value", 0)
+                    val_str = format_money(val)
+                    with col:
+                        st.markdown(
+                            f'<div class="grade-card" style="background-color:{color};">'
+                            f'<p class="grade-label" style="font-size:13px;font-weight:bold;">{ticker}</p>'
+                            f'<p style="font-size:11px;margin:0;opacity:0.85;">{name}</p>'
+                            f'<p class="grade-value">{grade}</p>'
+                            f'<p class="grade-score">Score: {score:.0f}</p>'
+                            f'<p style="font-size:12px;margin:2px 0;">👥 {guru_count}명 보유</p>'
+                            f'<p style="font-size:11px;margin:0;opacity:0.85;">{val_str}</p>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+        else:
+            cols = st.columns(len(top5_data))
+            for col, item in zip(cols, top5_data):
+                g = item.get("grades", {})
+                grade = g.get("overall_grade", "N/A")
+                score = g.get("overall_score", 0)
+                color = GRADE_COLORS.get(grade, "#666")
+                guru_count = item["guru_count"]
+                ticker = item["ticker"]
+                name = (item.get("info") or {}).get("name", item.get("name", ""))
+                if len(name) > 18:
+                    name = name[:16] + "…"
 
-            val = item.get("total_value", 0)
-            val_str = format_money(val)
+                val = item.get("total_value", 0)
+                val_str = format_money(val)
 
-            with col:
-                st.markdown(
-                    f'<div class="grade-card" style="background-color:{color};">'
-                    f'<p class="grade-label" style="font-size:13px;font-weight:bold;">{ticker}</p>'
-                    f'<p style="font-size:11px;margin:0;opacity:0.85;">{name}</p>'
-                    f'<p class="grade-value">{grade}</p>'
-                    f'<p class="grade-score">Score: {score:.0f}</p>'
-                    f'<p style="font-size:12px;margin:2px 0;">👥 {guru_count}명 보유</p>'
-                    f'<p style="font-size:11px;margin:0;opacity:0.85;">{val_str}</p>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
+                with col:
+                    st.markdown(
+                        f'<div class="grade-card" style="background-color:{color};">'
+                        f'<p class="grade-label" style="font-size:13px;font-weight:bold;">{ticker}</p>'
+                        f'<p style="font-size:11px;margin:0;opacity:0.85;">{name}</p>'
+                        f'<p class="grade-value">{grade}</p>'
+                        f'<p class="grade-score">Score: {score:.0f}</p>'
+                        f'<p style="font-size:12px;margin:2px 0;">👥 {guru_count}명 보유</p>'
+                        f'<p style="font-size:11px;margin:0;opacity:0.85;">{val_str}</p>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
 
         # ── Detail table ──
         with st.expander("📋 상세 테이블", expanded=False):
@@ -1516,12 +1799,21 @@ def display_guru_tab():
                     portfolio = fetch_guru_portfolio(selected_guru, top_n=20)
                 if portfolio and portfolio.get("top_holdings"):
                     # Summary metrics
-                    c1, c2, c3, c4 = st.columns(4)
-                    c1.metric("보고 기준일", portfolio["report_date"])
-                    c2.metric("제출일", portfolio["filing_date"])
-                    c3.metric("총 포트폴리오",
-                              format_money(portfolio['total_value']))
-                    c4.metric("총 보유 종목", f"{portfolio['holdings_count']}개")
+                    if _mobile:
+                        c1, c2 = st.columns(2)
+                        c1.metric("보고 기준일", portfolio["report_date"])
+                        c2.metric("제출일", portfolio["filing_date"])
+                        c3, c4 = st.columns(2)
+                        c3.metric("총 포트폴리오",
+                                  format_money(portfolio['total_value']))
+                        c4.metric("총 보유 종목", f"{portfolio['holdings_count']}개")
+                    else:
+                        c1, c2, c3, c4 = st.columns(4)
+                        c1.metric("보고 기준일", portfolio["report_date"])
+                        c2.metric("제출일", portfolio["filing_date"])
+                        c3.metric("총 포트폴리오",
+                                  format_money(portfolio['total_value']))
+                        c4.metric("총 보유 종목", f"{portfolio['holdings_count']}개")
 
                     st.markdown("---")
 
@@ -2152,12 +2444,21 @@ def display_portfolio_tab():
     else:
         pm = {}
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric(t("bt.total_return"), f"{pm.get('total_return', 0):.1f}%")
-    c2.metric(t("bt.annual_return"), f"{pm.get('annual_return', 0):.1f}%")
-    c3.metric(t("bt.annual_vol"), f"{pm.get('annual_volatility', 0):.1f}%")
-    c4.metric("Sharpe", f"{pm.get('sharpe_ratio', 0):.2f}")
-    c5.metric("MDD", f"{pm.get('max_drawdown', 0):.1f}%")
+    if _mobile:
+        _pc1, _pc2, _pc3 = st.columns(3)
+        _pc1.metric(t("bt.total_return"), f"{pm.get('total_return', 0):.1f}%")
+        _pc2.metric(t("bt.annual_return"), f"{pm.get('annual_return', 0):.1f}%")
+        _pc3.metric(t("bt.annual_vol"), f"{pm.get('annual_volatility', 0):.1f}%")
+        _pc4, _pc5 = st.columns(2)
+        _pc4.metric("Sharpe", f"{pm.get('sharpe_ratio', 0):.2f}")
+        _pc5.metric("MDD", f"{pm.get('max_drawdown', 0):.1f}%")
+    else:
+        c1, c2, c3, c4, c5 = st.columns(5)
+        c1.metric(t("bt.total_return"), f"{pm.get('total_return', 0):.1f}%")
+        c2.metric(t("bt.annual_return"), f"{pm.get('annual_return', 0):.1f}%")
+        c3.metric(t("bt.annual_vol"), f"{pm.get('annual_volatility', 0):.1f}%")
+        c4.metric("Sharpe", f"{pm.get('sharpe_ratio', 0):.2f}")
+        c5.metric("MDD", f"{pm.get('max_drawdown', 0):.1f}%")
 
     # ── Sub-tabs ─────────────────────────────────────────
     pf_sub1, pf_sub2, pf_sub3 = st.tabs(["📈 성과 분석", "📊 종목 분석", "⚠️ 리스크 분석"])
@@ -2182,19 +2483,31 @@ def display_portfolio_tab():
             ), use_container_width=True)
 
     with pf_sub2:
-        col_w, col_corr = st.columns(2)
-        with col_w:
+        if _mobile:
             st.plotly_chart(
                 chart_weight_allocation(weights, f"포트폴리오 비중 ({pf_data['scheme']})"),
                 use_container_width=True,
             )
-        with col_corr:
             corr = correlation_matrix(prices)
             if not corr.empty:
                 st.plotly_chart(
                     chart_correlation_heatmap(corr),
                     use_container_width=True,
                 )
+        else:
+            col_w, col_corr = st.columns(2)
+            with col_w:
+                st.plotly_chart(
+                    chart_weight_allocation(weights, f"포트폴리오 비중 ({pf_data['scheme']})"),
+                    use_container_width=True,
+                )
+            with col_corr:
+                corr = correlation_matrix(prices)
+                if not corr.empty:
+                    st.plotly_chart(
+                        chart_correlation_heatmap(corr),
+                        use_container_width=True,
+                    )
         # Contribution
         contrib = contribution_by_ticker(prices, weights)
         if contrib is not None and not contrib.empty:
@@ -2211,11 +2524,19 @@ def display_portfolio_tab():
                     use_container_width=True,
                 )
             # Alpha / Beta / Info Ratio
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Alpha (연간)", f"{pm.get('alpha', 0):.2f}%")
-            c2.metric("Beta", f"{pm.get('beta', 0):.2f}")
-            c3.metric("Tracking Error", f"{pm.get('tracking_error', 0):.1f}%")
-            c4.metric("Info Ratio", f"{pm.get('information_ratio', 0):.2f}")
+            if _mobile:
+                _ab1, _ab2 = st.columns(2)
+                _ab1.metric("Alpha (연간)", f"{pm.get('alpha', 0):.2f}%")
+                _ab2.metric("Beta", f"{pm.get('beta', 0):.2f}")
+                _ab3, _ab4 = st.columns(2)
+                _ab3.metric("Tracking Error", f"{pm.get('tracking_error', 0):.1f}%")
+                _ab4.metric("Info Ratio", f"{pm.get('information_ratio', 0):.2f}")
+            else:
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Alpha (연간)", f"{pm.get('alpha', 0):.2f}%")
+                c2.metric("Beta", f"{pm.get('beta', 0):.2f}")
+                c3.metric("Tracking Error", f"{pm.get('tracking_error', 0):.1f}%")
+                c4.metric("Info Ratio", f"{pm.get('information_ratio', 0):.2f}")
 
         # Factor exposure
         st.subheader("📉 Fama-French 팩터 노출도")
@@ -2314,13 +2635,23 @@ def display_backtest_tab():
     st.subheader(f"전략: {bt_result.strategy_name}")
 
     # ── Summary metrics row ──────────────────────────────
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("총 수익률", f"{metrics.get('total_return', 0):.1f}%")
-    c2.metric("연간 수익률", f"{metrics.get('annual_return', 0):.1f}%")
-    c3.metric("Sharpe", f"{metrics.get('sharpe_ratio', 0):.2f}")
-    c4.metric("Sortino", f"{metrics.get('sortino_ratio', 0):.2f}")
-    c5.metric("MDD", f"{metrics.get('max_drawdown', 0):.1f}%")
-    c6.metric("벤치마크 수익", f"{metrics.get('benchmark_return', 0):.1f}%")
+    if _mobile:
+        _bc1, _bc2, _bc3 = st.columns(3)
+        _bc1.metric("총 수익률", f"{metrics.get('total_return', 0):.1f}%")
+        _bc2.metric("연간 수익률", f"{metrics.get('annual_return', 0):.1f}%")
+        _bc3.metric("Sharpe", f"{metrics.get('sharpe_ratio', 0):.2f}")
+        _bc4, _bc5, _bc6 = st.columns(3)
+        _bc4.metric("Sortino", f"{metrics.get('sortino_ratio', 0):.2f}")
+        _bc5.metric("MDD", f"{metrics.get('max_drawdown', 0):.1f}%")
+        _bc6.metric("벤치마크", f"{metrics.get('benchmark_return', 0):.1f}%")
+    else:
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
+        c1.metric("총 수익률", f"{metrics.get('total_return', 0):.1f}%")
+        c2.metric("연간 수익률", f"{metrics.get('annual_return', 0):.1f}%")
+        c3.metric("Sharpe", f"{metrics.get('sharpe_ratio', 0):.2f}")
+        c4.metric("Sortino", f"{metrics.get('sortino_ratio', 0):.2f}")
+        c5.metric("MDD", f"{metrics.get('max_drawdown', 0):.1f}%")
+        c6.metric("벤치마크 수익", f"{metrics.get('benchmark_return', 0):.1f}%")
 
     # ── Sub-tabs ─────────────────────────────────────────
     bt_sub1, bt_sub2, bt_sub3 = st.tabs(["📈 결과", "📋 매매 내역", "📊 전략 상세"])
@@ -2377,28 +2708,54 @@ def display_backtest_tab():
     with bt_sub3:
         # Detailed metrics
         st.subheader(t("bt.detail_metrics"))
-        detail_c1, detail_c2, detail_c3 = st.columns(3)
 
-        with detail_c1:
+        if _mobile:
             st.markdown(t("bt.returns"))
-            st.metric(t("bt.total_return"), f"{metrics.get('total_return', 0):.2f}%")
-            st.metric(t("bt.annual_return"), f"{metrics.get('annual_return', 0):.2f}%")
-            st.metric(t("bt.benchmark_return"), f"{metrics.get('benchmark_return', 0):.2f}%")
-            st.metric(t("bt.benchmark_return"), f"{metrics.get('benchmark_ann_return', 0):.2f}%")
+            _dm1, _dm2 = st.columns(2)
+            _dm1.metric(t("bt.total_return"), f"{metrics.get('total_return', 0):.2f}%")
+            _dm2.metric(t("bt.annual_return"), f"{metrics.get('annual_return', 0):.2f}%")
+            _dm3, _dm4 = st.columns(2)
+            _dm3.metric(t("bt.benchmark_return"), f"{metrics.get('benchmark_return', 0):.2f}%")
+            _dm4.metric(t("bt.benchmark_return"), f"{metrics.get('benchmark_ann_return', 0):.2f}%")
 
-        with detail_c2:
             st.markdown(t("bt.risk"))
-            st.metric(t("bt.annual_vol"), f"{metrics.get('annual_volatility', 0):.2f}%")
-            st.metric("Max Drawdown", f"{metrics.get('max_drawdown', 0):.2f}%")
-            st.metric("Calmar Ratio", f"{metrics.get('calmar_ratio', 0):.2f}")
-            st.metric(t("bt.win_rate"), f"{metrics.get('win_rate', 0):.1f}%")
+            _dm5, _dm6 = st.columns(2)
+            _dm5.metric(t("bt.annual_vol"), f"{metrics.get('annual_volatility', 0):.2f}%")
+            _dm6.metric("Max Drawdown", f"{metrics.get('max_drawdown', 0):.2f}%")
+            _dm7, _dm8 = st.columns(2)
+            _dm7.metric("Calmar Ratio", f"{metrics.get('calmar_ratio', 0):.2f}")
+            _dm8.metric(t("bt.win_rate"), f"{metrics.get('win_rate', 0):.1f}%")
 
-        with detail_c3:
             st.markdown(t("bt.vs_market"))
-            st.metric("Alpha", f"{metrics.get('alpha', 0):.2f}%")
-            st.metric("Beta", f"{metrics.get('beta', 0):.2f}")
-            st.metric("Sharpe", f"{metrics.get('sharpe_ratio', 0):.2f}")
-            st.metric("Sortino", f"{metrics.get('sortino_ratio', 0):.2f}")
+            _dm9, _dm10 = st.columns(2)
+            _dm9.metric("Alpha", f"{metrics.get('alpha', 0):.2f}%")
+            _dm10.metric("Beta", f"{metrics.get('beta', 0):.2f}")
+            _dm11, _dm12 = st.columns(2)
+            _dm11.metric("Sharpe", f"{metrics.get('sharpe_ratio', 0):.2f}")
+            _dm12.metric("Sortino", f"{metrics.get('sortino_ratio', 0):.2f}")
+        else:
+            detail_c1, detail_c2, detail_c3 = st.columns(3)
+
+            with detail_c1:
+                st.markdown(t("bt.returns"))
+                st.metric(t("bt.total_return"), f"{metrics.get('total_return', 0):.2f}%")
+                st.metric(t("bt.annual_return"), f"{metrics.get('annual_return', 0):.2f}%")
+                st.metric(t("bt.benchmark_return"), f"{metrics.get('benchmark_return', 0):.2f}%")
+                st.metric(t("bt.benchmark_return"), f"{metrics.get('benchmark_ann_return', 0):.2f}%")
+
+            with detail_c2:
+                st.markdown(t("bt.risk"))
+                st.metric(t("bt.annual_vol"), f"{metrics.get('annual_volatility', 0):.2f}%")
+                st.metric("Max Drawdown", f"{metrics.get('max_drawdown', 0):.2f}%")
+                st.metric("Calmar Ratio", f"{metrics.get('calmar_ratio', 0):.2f}")
+                st.metric(t("bt.win_rate"), f"{metrics.get('win_rate', 0):.1f}%")
+
+            with detail_c3:
+                st.markdown(t("bt.vs_market"))
+                st.metric("Alpha", f"{metrics.get('alpha', 0):.2f}%")
+                st.metric("Beta", f"{metrics.get('beta', 0):.2f}")
+                st.metric("Sharpe", f"{metrics.get('sharpe_ratio', 0):.2f}")
+                st.metric("Sortino", f"{metrics.get('sortino_ratio', 0):.2f}")
 
         # Weights history
         if bt_result.weights_history:
@@ -2446,25 +2803,21 @@ _TAB_KEYS = ["analysis", "screener", "guru", "portfolio", "backtest"]
 if is_admin():
     _TAB_KEYS.append("admin")
 
-_TAB_LABELS = {
-    "analysis": t("tab.analysis"),
-    "screener": t("tab.screener"),
-    "guru": t("tab.guru"),
-    "portfolio": t("tab.portfolio"),
-    "backtest": t("tab.backtest"),
-    "admin": t("tab.admin"),
-}
+_label_prefix = "tab_m" if _mobile else "tab"
+_TAB_LABELS = [t(f"{_label_prefix}.{k}") for k in _TAB_KEYS]
 
-_nav_cols = st.columns(len(_TAB_KEYS))
-for _i, _key in enumerate(_TAB_KEYS):
-    _is_active = (st.session_state["active_tab"] == _key)
-    _btn_type = "primary" if _is_active else "secondary"
-    if _nav_cols[_i].button(
-        _TAB_LABELS[_key], key=f"nav_{_key}", type=_btn_type, use_container_width=True
-    ):
-        if not _is_active:
-            st.session_state["active_tab"] = _key
-            st.rerun()
+_current_idx = _TAB_KEYS.index(st.session_state["active_tab"]) if st.session_state["active_tab"] in _TAB_KEYS else 0
+_selected_label = st.radio(
+    "nav", _TAB_LABELS,
+    index=_current_idx,
+    horizontal=True,
+    label_visibility="collapsed",
+    key="main_nav_radio",
+)
+_selected_key = _TAB_KEYS[_TAB_LABELS.index(_selected_label)]
+if _selected_key != st.session_state["active_tab"]:
+    st.session_state["active_tab"] = _selected_key
+    st.rerun()
 
 st.markdown("---")
 
