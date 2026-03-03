@@ -4,7 +4,11 @@ and provide responsive layout helpers.
 """
 
 import streamlit as st
-import streamlit.components.v1 as components
+
+try:
+    import streamlit.components.v1 as components
+except ImportError:
+    components = None  # fallback: JS injection disabled
 
 MOBILE_BREAKPOINT = 768  # px
 
@@ -38,22 +42,23 @@ def init_mobile_detect():
     st.session_state["is_mobile"] = False
 
     # Inject JS that redirects once with viewport width as query param
-    components.html(
-        """
-        <script>
-        (function() {
-            const vw = window.innerWidth || document.documentElement.clientWidth;
-            const url = new URL(window.parent.location);
-            if (!url.searchParams.has('_vw')) {
-                url.searchParams.set('_vw', vw);
-                window.parent.location.replace(url.toString());
-            }
-        })();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
+    if components:
+        components.html(
+            """
+            <script>
+            (function() {
+                const vw = window.innerWidth || document.documentElement.clientWidth;
+                const url = new URL(window.parent.location);
+                if (!url.searchParams.has('_vw')) {
+                    url.searchParams.set('_vw', vw);
+                    window.parent.location.replace(url.toString());
+                }
+            })();
+            </script>
+            """,
+            height=0,
+            width=0,
+        )
 
 
 def is_mobile() -> bool:
@@ -73,20 +78,21 @@ def auto_collapse_sidebar():
     if st.session_state.get("_sidebar_auto_collapsed"):
         return  # already collapsed once this session
     st.session_state["_sidebar_auto_collapsed"] = True
-    components.html(
-        """
-        <script>
-        (function() {
-            const btn = window.parent.document.querySelector(
-                '[data-testid="stSidebarCollapseButton"] button'
-            );
-            if (btn) { btn.click(); }
-        })();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
+    if components:
+        components.html(
+            """
+            <script>
+            (function() {
+                const btn = window.parent.document.querySelector(
+                    '[data-testid="stSidebarCollapseButton"] button'
+                );
+                if (btn) { btn.click(); }
+            })();
+            </script>
+            """,
+            height=0,
+            width=0,
+        )
 
 
 def mcols(desktop: int, mobile: int = 1, gap: str = "small"):

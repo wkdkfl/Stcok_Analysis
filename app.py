@@ -19,7 +19,19 @@ ssl._create_default_https_context = ssl._create_unverified_context  # noqa: S323
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ── Path setup ───────────────────────────────────────────
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_APP_DIR = os.path.dirname(os.path.abspath(__file__))
+if _APP_DIR not in sys.path:
+    sys.path.insert(0, _APP_DIR)
+
+# On Streamlit Cloud (/mount/src/<repo>/), the parent "/mount/src/" can shadow
+# our local `src/` package as a namespace package. Force-clear if stale.
+if "src" in sys.modules:
+    _cached = sys.modules["src"]
+    _expected = os.path.join(_APP_DIR, "src")
+    _cached_path = getattr(_cached, "__path__", None)
+    if _cached_path and not any(_expected in str(p) for p in _cached_path):
+        for _k in [k for k in sys.modules if k == "src" or k.startswith("src.")]:
+            del sys.modules[_k]
 
 from config import (
     MAX_TICKERS, DCF_DEFAULTS, SCREENER_UNIVERSES, SECTOR_MULTIPLES_FALLBACK,
