@@ -20,18 +20,30 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ── Path setup ───────────────────────────────────────────
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
-if _APP_DIR not in sys.path:
-    sys.path.insert(0, _APP_DIR)
+# Ensure _APP_DIR is always FIRST in sys.path
+if _APP_DIR in sys.path:
+    sys.path.remove(_APP_DIR)
+sys.path.insert(0, _APP_DIR)
 
-# On Streamlit Cloud (/mount/src/<repo>/), the parent "/mount/src/" can shadow
-# our local `src/` package as a namespace package. Force-clear if stale.
-if "src" in sys.modules:
-    _cached = sys.modules["src"]
-    _expected = os.path.join(_APP_DIR, "src")
-    _cached_path = getattr(_cached, "__path__", None)
-    if _cached_path and not any(_expected in str(p) for p in _cached_path):
-        for _k in [k for k in sys.modules if k == "src" or k.startswith("src.")]:
-            del sys.modules[_k]
+# On Streamlit Cloud the repo is mounted at /mount/src/<repo>/.
+# The parent "/mount/src/" can be picked up as a namespace package for `src`,
+# shadowing our real src/ package. To prevent this, we unconditionally
+# force-register our local src/ as THE canonical `src` package.
+import importlib.util as _ilu
+_src_dir = os.path.join(_APP_DIR, "src")
+_src_init = os.path.join(_src_dir, "__init__.py")
+if os.path.isfile(_src_init):
+    # Evict any pre-cached 'src' entries (stale namespace packages etc.)
+    for _k in [k for k in list(sys.modules) if k == "src" or k.startswith("src.")]:
+        del sys.modules[_k]
+    # Explicitly register our src/ package
+    _spec = _ilu.spec_from_file_location(
+        "src", _src_init,
+        submodule_search_locations=[_src_dir],
+    )
+    _src_mod = _ilu.module_from_spec(_spec)
+    sys.modules["src"] = _src_mod
+    _spec.loader.exec_module(_src_mod)
 
 from config import (
     MAX_TICKERS, DCF_DEFAULTS, SCREENER_UNIVERSES, SECTOR_MULTIPLES_FALLBACK,
