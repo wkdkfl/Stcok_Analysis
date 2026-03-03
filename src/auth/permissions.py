@@ -25,6 +25,8 @@ ROLE_LIMITS = {
         "can_input_api_key": True,
         "can_manage_users": True,
         "analysis_per_minute": None,           # unlimited
+        "analysis_per_day": None,              # unlimited
+        "screener_per_day": None,              # unlimited
     },
     "premium": {
         "max_tickers_per_analysis": 10,
@@ -37,6 +39,8 @@ ROLE_LIMITS = {
         "can_input_api_key": True,
         "can_manage_users": False,
         "analysis_per_minute": 20,
+        "analysis_per_day": None,              # unlimited
+        "screener_per_day": None,              # unlimited
     },
     "free": {
         "max_tickers_per_analysis": 1,
@@ -49,6 +53,8 @@ ROLE_LIMITS = {
         "can_input_api_key": False,
         "can_manage_users": False,
         "analysis_per_minute": 5,
+        "analysis_per_day": 10,               # 10 analyses per day
+        "screener_per_day": 3,                # 3 screener scans per day
     },
 }
 
@@ -224,3 +230,89 @@ def can_save_analysis() -> bool:
 def is_admin() -> bool:
     """Check if current user is admin."""
     return get_user_role() == "admin"
+
+
+# ═══════════════════════════════════════════════════════════
+# DAILY USAGE LIMITS
+# ═══════════════════════════════════════════════════════════
+
+def check_daily_limit(action: str) -> bool:
+    """
+    Check if the current user is within the daily limit for an action.
+    action should be 'analysis' or 'screener' (maps to '{action}_per_day' key).
+    Returns True if allowed.
+    """
+    limit = get_limit(f"{action}_per_day")
+    if limit is None:
+        return True
+    if limit == 0:
+        return False
+
+    try:
+        from src.db.data import count_daily_usage
+        user = st.session_state.get("user", {})
+        if not user.get("id"):
+            return True  # no user context, allow (rate_limit will catch)
+        used = count_daily_usage(user["id"], action)
+        return used < limit
+    except Exception:
+        return True  # on DB error, allow (fail-open)
+
+
+def get_daily_usage(action: str) -> tuple:
+    """
+    Returns (used_today, daily_limit) for a given action.
+    Limit is None for unlimited.
+    """
+    limit = get_limit(f"{action}_per_day")
+    try:
+        from src.db.data import count_daily_usage
+        user = st.session_state.get("user", {})
+        if user.get("id"):
+            used = count_daily_usage(user["id"], action)
+        else:
+            used = 0
+    except Exception:
+        used = 0
+    return used, limit
+
+
+def require_daily_limit(action: str) -> bool:
+    """
+    Check daily limit and show warning if exceeded.
+    Returns True if request is allowed.
+    """
+    if check_daily_limit(action):
+        return True
+
+    lang = get_language()
+    limit = get_limit(f"{action}_per_day")
+
+    action_names = {
+        "analysis": "종목 분석" if lang == "ko" else "Stock Analysis",
+        "screener": "스크리너" if lang == "ko" else "Screener",
+    }
+    action_name = action_names.get(action, action)
+
+    if lang == "ko":
+        st.warning(
+            f"🔒 오늘 **{action_name}** 사용 한도({limit}회)를 초과했습니다.\n\n"
+            f"내일 다시 시도하거나 **Premium**으로 업그레이드하세요."
+        )
+    else:
+        st.warning(
+            f"🔒 You've reached today's **{action_name}** limit ({limit} uses).\n\n"
+            f"Try again tomorrow or upgrade to **Premium**."
+        )
+    return False
+
+
+def record_usage(action: str):
+    """Record a daily usage for the current user."""
+    try:
+        from src.db.data import record_daily_usage
+        user = st.session_state.get("user", {})
+        if user.get("id"):
+            record_daily_usage(user["id"], action)
+    except Exception:
+        pass

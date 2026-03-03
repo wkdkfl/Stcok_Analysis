@@ -39,6 +39,7 @@ from src.auth.permissions import (
     get_max_tickers, get_screener_limit, require_permission,
     can_use_portfolio, can_use_backtest, can_generate_ai_report,
     get_ai_report_quota, can_save_analysis, is_admin, require_role,
+    require_daily_limit, record_usage, get_daily_usage,
 )
 from src.auth.rate_limit import require_rate_limit
 
@@ -2470,7 +2471,9 @@ st.markdown("---")
 # ──────────── VIEW: ANALYSIS ─────────────────────────────
 if st.session_state["active_tab"] == "analysis":
     if analyze_btn:
-        if not require_rate_limit("analysis"):
+        if not require_daily_limit("analysis"):
+            pass  # daily limit exceeded
+        elif not require_rate_limit("analysis"):
             pass  # rate limited
         else:
             tickers = parse_tickers(ticker_input)
@@ -2504,6 +2507,9 @@ if st.session_state["active_tab"] == "analysis":
 
                 if new_results:
                     st.session_state["all_results"] = new_results
+                    # Record daily usage for each analyzed ticker
+                    for _ in tickers:
+                        record_usage("analysis")
                 else:
                     st.error(t("err.no_tickers"))
             else:
@@ -2580,9 +2586,12 @@ if st.session_state["active_tab"] == "analysis":
 
 # ──────────── VIEW: SCREENER ─────────────────────────────
 elif st.session_state["active_tab"] == "screener":
-    if not require_rate_limit("screener"):
+    if not require_daily_limit("screener"):
+        pass  # daily limit exceeded
+    elif not require_rate_limit("screener"):
         pass
     else:
+        record_usage("screener")
         display_screener()
 
 # ──────────── VIEW: 13F GURU ─────────────────────────────

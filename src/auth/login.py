@@ -701,6 +701,26 @@ def render_user_sidebar():
         st.markdown(f"**{display_name}** {role_label}")
         st.caption(user["email"])
 
+        # ── Daily usage display for free users ───────────
+        if user["role"] == "free":
+            try:
+                from src.auth.permissions import get_daily_usage
+                a_used, a_limit = get_daily_usage("analysis")
+                s_used, s_limit = get_daily_usage("screener")
+                if a_limit is not None or s_limit is not None:
+                    parts = []
+                    if a_limit is not None:
+                        a_remaining = max(0, a_limit - a_used)
+                        parts.append(f"📊 {'분석' if lang == 'ko' else 'Analysis'}: {a_remaining}/{a_limit}")
+                    if s_limit is not None:
+                        s_remaining = max(0, s_limit - s_used)
+                        parts.append(f"🔍 {'스크리너' if lang == 'ko' else 'Screener'}: {s_remaining}/{s_limit}")
+                    label = " | ".join(parts)
+                    today_label = "오늘 남은 횟수" if lang == "ko" else "Remaining today"
+                    st.caption(f"{today_label}: {label}")
+            except Exception:
+                pass
+
         if st.button(
             "🚪 로그아웃" if lang == "ko" else "🚪 Logout",
             key="logout_btn",

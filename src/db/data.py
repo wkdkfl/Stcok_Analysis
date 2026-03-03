@@ -167,6 +167,60 @@ def count_daily_reports(user_id: str) -> int:
 
 
 # ═══════════════════════════════════════════════════════════
+# DAILY USAGE TRACKING (rate_limits table)
+# ═══════════════════════════════════════════════════════════
+
+def count_daily_usage(user_id: str, action_type: str) -> int:
+    """
+    Count how many times a user has performed an action today.
+    Uses the rate_limits table with window_start >= today 00:00 UTC.
+    """
+    db = get_supabase()
+    today_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
+    result = db.table("rate_limits").select(
+        "request_count"
+    ).eq("user_id", user_id).eq(
+        "action_type", action_type
+    ).gte("window_start", today_start).execute()
+
+    if result.data:
+        return sum(row.get("request_count", 0) for row in result.data)
+    return 0
+
+
+def record_daily_usage(user_id: str, action_type: str):
+    """
+    Record one usage of an action for today.
+    Upserts into rate_limits: increments request_count if today's row exists,
+    otherwise inserts a new row.
+    """
+    db = get_supabase()
+    today_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
+
+    # Check if today's row exists
+    existing = db.table("rate_limits").select("id, request_count").eq(
+        "user_id", user_id
+    ).eq("action_type", action_type).gte("window_start", today_start).execute()
+
+    if existing.data:
+        row = existing.data[0]
+        db.table("rate_limits").update({
+            "request_count": row["request_count"] + 1,
+        }).eq("id", row["id"]).execute()
+    else:
+        db.table("rate_limits").insert({
+            "user_id": user_id,
+            "action_type": action_type,
+            "window_start": today_start,
+            "request_count": 1,
+        }).execute()
+
+
+# ═══════════════════════════════════════════════════════════
 # PORTFOLIOS
 # ═══════════════════════════════════════════════════════════
 
