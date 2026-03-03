@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import SECTOR_ETFS, KR_SECTOR_ETFS, CACHE_TTL
 from src.fetcher.ssl_session import get_session
 
-_session = get_session()
+_session = get_session()  # None on Cloud (yfinance manages its own session)
 
 
 def compute_macro_regime(macro_data: Dict[str, Any], stock_data: Dict[str, Any]) -> Dict[str, Any]:

@@ -25,7 +25,8 @@ def fetch_stock_data(ticker: str) -> Dict[str, Any]:
     Fetch comprehensive stock data from Yahoo Finance.
     Returns a dictionary with all relevant financial data.
     """
-    t = yf.Ticker(ticker, session=get_session())
+    _session = get_session()
+    t = yf.Ticker(ticker, session=_session) if _session else yf.Ticker(ticker)
     info = _safe_info(t)
     data: Dict[str, Any] = {}
 
@@ -152,10 +153,16 @@ def fetch_stock_data(ticker: str) -> Dict[str, Any]:
 
 
 def _safe_info(t: yf.Ticker) -> dict:
-    """Safely get ticker info."""
+    """Safely get ticker info. Stores error detail in session for debugging."""
     try:
-        return t.info or {}
-    except Exception:
+        result = t.info or {}
+        return result
+    except Exception as e:
+        # Store error detail so run_analysis can display it
+        try:
+            st.session_state["_last_fetch_error"] = f"{type(e).__name__}: {e}"
+        except Exception:
+            pass
         return {}
 
 

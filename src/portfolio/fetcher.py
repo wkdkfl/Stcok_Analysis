@@ -28,12 +28,9 @@ def _get_session():
     """Get SSL-safe session."""
     try:
         from src.fetcher.ssl_session import get_session
-        return get_session()
+        return get_session()  # may be None on Cloud
     except Exception:
-        import requests
-        s = requests.Session()
-        s.verify = False
-        return s
+        return None
 
 
 def fetch_multi_history(
@@ -56,15 +53,17 @@ def fetch_multi_history(
 
     try:
         session = _get_session()
-        raw = yf.download(
-            tickers,
+        dl_kwargs = dict(
+            tickers=tickers,
             start=start,
             end=end,
             interval="1d",
             auto_adjust=True,
             progress=False,
-            session=session,
         )
+        if session is not None:
+            dl_kwargs["session"] = session
+        raw = yf.download(**dl_kwargs)
         if raw is None or raw.empty:
             return None
 

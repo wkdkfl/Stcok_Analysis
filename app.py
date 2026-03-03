@@ -678,11 +678,19 @@ def run_analysis(ticker: str, dcf_overrides: dict):
     from src.macro.regime import compute_macro_regime
 
     # ── Step 1: Fetch data (sequential — all others depend on it) ──
-    with st.spinner(t("spinner.fetching", ticker=ticker)):
-        stock_data = fetch_stock_data(ticker)
+    try:
+        with st.spinner(t("spinner.fetching", ticker=ticker)):
+            stock_data = fetch_stock_data(ticker)
+    except Exception as e:
+        st.error(f"❌ {ticker}: {type(e).__name__}: {e}")
+        return None
 
     if not stock_data.get("current_price"):
-        st.error(t("err.no_data", ticker=ticker))
+        _detail = st.session_state.pop("_last_fetch_error", None)
+        _msg = t("err.no_data", ticker=ticker)
+        if _detail:
+            _msg += f"\n\n**Debug:** `{_detail}`"
+        st.error(_msg)
         return None
 
     results = {"data": stock_data, "_errors": []}

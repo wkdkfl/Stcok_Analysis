@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from config import FRED_API_KEY, FRED_SERIES, CACHE_TTL
 from src.fetcher.ssl_session import get_session
 
-_session = get_session()
+_session = get_session()  # None on Cloud (yfinance manages its own session)
 
 
 def _get_fred_client():

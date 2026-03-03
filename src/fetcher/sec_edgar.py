@@ -29,12 +29,17 @@ def _get_sec_session():
     try:
         from src.fetcher.ssl_session import get_session
         session = get_session()
-        return session
+        if session is not None:
+            return session
     except Exception:
-        import requests
-        session = requests.Session()
+        pass
+    # SEC EDGAR works with standard requests — no curl_cffi needed
+    import requests
+    session = requests.Session()
+    import os
+    if os.environ.get("DISABLE_SSL_VERIFY", "0") == "1":
         session.verify = False
-        return session
+    return session
 
 
 def _sec_get(url: str, params: dict = None) -> Optional[dict]:

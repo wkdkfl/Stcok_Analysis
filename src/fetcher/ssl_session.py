@@ -25,35 +25,39 @@ if _DISABLE_SSL:
 
 def get_session():
     """
-    Create a requests-compatible session.
-    Uses curl_cffi if available (yfinance >= 1.0), else standard requests.
-    SSL verification is disabled only when DISABLE_SSL_VERIFY=1.
+    Create a requests-compatible session for yfinance.
+    - When DISABLE_SSL_VERIFY=1: returns curl_cffi session with verify=False
+    - Otherwise: returns None (yfinance 1.x manages its own curl_cffi session)
     """
+    if not _DISABLE_SSL:
+        # Let yfinance create its default session — most reliable on Cloud.
+        return None
+
+    # Local/corporate with SSL disabled: must provide custom session
     try:
         from curl_cffi.requests import Session as CurlSession
-        session = CurlSession(verify=not _DISABLE_SSL, impersonate="chrome")
-        return session
-    except ImportError:
+        return CurlSession(verify=False, impersonate="chrome")
+    except Exception:
         pass
 
-    # Fallback: standard requests
+    # Last resort: standard requests (yfinance 1.x may reject, but try)
     import requests
     from requests.adapters import HTTPAdapter
 
     session = requests.Session()
 
-    if _DISABLE_SSL:
-        class SSLAdapter(HTTPAdapter):
-            def init_poolmanager(self, *args, **kwargs):
-                ctx = ssl.create_default_context()
-                ctx.check_hostname = False
-                ctx.verify_mode = ssl.CERT_NONE
-                kwargs["ssl_context"] = ctx
-                return super().init_poolmanager(*args, **kwargs)
+    class SSLAdapter(HTTPAdapter):
+        def init_poolmanager(self, *args, **kwargs):
+            import ssl as _ssl
+            ctx = _ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = _ssl.CERT_NONE
+            kwargs["ssl_context"] = ctx
+            return super().init_poolmanager(*args, **kwargs)
 
-        session.verify = False
-        adapter = SSLAdapter()
-        session.mount("https://", adapter)
-        session.mount("http://", adapter)
+    session.verify = False
+    adapter = SSLAdapter()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
 
     return session

@@ -421,7 +421,8 @@ def _fetch_light_info_raw(ticker: str) -> Optional[Dict[str, Any]]:
     @with_retry(max_retries=2, backoff=0.5)
     def _inner():
         from src.fetcher.ssl_session import get_session
-        t = yf.Ticker(ticker, session=get_session())
+        _s = get_session()
+        t = yf.Ticker(ticker, session=_s) if _s else yf.Ticker(ticker)
         info = t.info or {}
 
         price = info.get("currentPrice") or info.get("regularMarketPrice")
@@ -433,7 +434,7 @@ def _fetch_light_info_raw(ticker: str) -> Optional[Dict[str, Any]]:
         if null_count > len(_SPARSE_CHECK_FIELDS) * 0.7:
             import time as _time
             _time.sleep(1.0)
-            t2 = yf.Ticker(ticker, session=get_session())
+            t2 = yf.Ticker(ticker, session=_s) if _s else yf.Ticker(ticker)
             info2 = t2.info or {}
             null_count2 = sum(1 for f in _SPARSE_CHECK_FIELDS if info2.get(f) is None)
             if null_count2 < null_count:
