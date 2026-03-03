@@ -59,6 +59,30 @@ def is_mobile() -> bool:
     return st.session_state.get("is_mobile", False)
 
 
+def auto_collapse_sidebar():
+    """
+    On mobile, automatically collapse the sidebar after the page loads
+    so the content area is fully visible. The user can reopen it
+    via the floating toggle button.
+    """
+    if not is_mobile():
+        return
+    components.html(
+        """
+        <script>
+        (function() {
+            const btn = window.parent.document.querySelector(
+                '[data-testid="stSidebarCollapseButton"] button'
+            );
+            if (btn) { btn.click(); }
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 def mcols(desktop: int, mobile: int = 1, gap: str = "small"):
     """
     Return st.columns() with responsive column count.

@@ -42,7 +42,7 @@ from src.auth.permissions import (
     require_daily_limit, record_usage, get_daily_usage,
 )
 from src.auth.rate_limit import require_rate_limit
-from src.mobile import init_mobile_detect, is_mobile, mcols, mcols_ratio, render_metrics_grid
+from src.mobile import init_mobile_detect, is_mobile, auto_collapse_sidebar, mcols, mcols_ratio, render_metrics_grid
 
 # ── Page Config ──────────────────────────────────────────
 st.set_page_config(
@@ -55,56 +55,159 @@ st.set_page_config(
 # ── Custom CSS ───────────────────────────────────────────
 st.markdown("""
 <style>
-    /* ── Base UI Components ─────────────────────────── */
+    /* ── Design Tokens ──────────────────────────────── */
+    :root {
+        --accent: #6366f1;
+        --accent-light: #818cf8;
+        --accent-bg: rgba(99,102,241,0.08);
+        --surface: #ffffff;
+        --surface-alt: #f8fafc;
+        --surface-glass: rgba(255,255,255,0.72);
+        --text-primary: #0f172a;
+        --text-secondary: #64748b;
+        --border: rgba(0,0,0,0.06);
+        --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+        --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+        --shadow-lg: 0 8px 24px rgba(0,0,0,0.10);
+        --radius-sm: 8px;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --transition: 0.2s cubic-bezier(0.4,0,0.2,1);
+    }
+
+    /* ── Dark Mode Tokens ────────────────────────────── */
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --surface: #1e1e2e;
+            --surface-alt: #181825;
+            --surface-glass: rgba(30,30,46,0.72);
+            --text-primary: #cdd6f4;
+            --text-secondary: #a6adc8;
+            --border: rgba(255,255,255,0.08);
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.35);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+        }
+    }
+
+    /* ── Base UI — Premium Cards ──────────────────────── */
     .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 15px 20px;
-        border-radius: 10px;
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+        padding: 16px 20px;
+        border-radius: var(--radius-md);
         color: white;
         text-align: center;
+        box-shadow: var(--shadow-md);
+        transition: transform var(--transition), box-shadow var(--transition);
     }
-    .metric-card h3 { font-size: 14px; margin: 0; opacity: 0.9; }
-    .metric-card h1 { font-size: 24px; margin: 5px 0 0 0; }
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-lg);
+    }
+    .metric-card h3 {
+        font-size: 12px; margin: 0; opacity: 0.85;
+        font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .metric-card h1 {
+        font-size: 26px; margin: 6px 0 0 0;
+        font-weight: 700; font-variant-numeric: tabular-nums;
+    }
+
     .signal-box {
-        padding: 15px;
-        border-radius: 10px;
+        padding: 14px 20px;
+        border-radius: var(--radius-lg);
         text-align: center;
-        font-size: 20px;
-        font-weight: bold;
+        font-size: 18px;
+        font-weight: 700;
+        box-shadow: var(--shadow-sm);
+        border: 1px solid var(--border);
     }
+
     .grade-card {
-        padding: 10px 6px;
-        border-radius: 8px;
-        text-align: center;
-        color: white;
-        margin: 2px;
+        padding: 0; border-radius: var(--radius-md);
+        text-align: center; margin: 3px; overflow: hidden;
+        box-shadow: var(--shadow-sm);
+        transition: transform var(--transition);
     }
+    .grade-card:hover { transform: translateY(-1px); }
+    .grade-card .grade-top { padding: 8px 6px 4px; }
     .grade-card .grade-label {
-        font-size: 11px;
-        opacity: 0.9;
-        margin: 0;
+        font-size: 10px; opacity: 0.85; margin: 0;
+        font-weight: 500; letter-spacing: 0.3px; text-transform: uppercase;
+        color: white;
     }
     .grade-card .grade-value {
-        font-size: 22px;
-        font-weight: bold;
-        margin: 2px 0 0 0;
+        font-size: 24px; font-weight: 800; margin: 2px 0 0 0;
+        color: white; font-variant-numeric: tabular-nums;
     }
     .grade-card .grade-score {
-        font-size: 10px;
-        opacity: 0.8;
-        margin: 0;
+        font-size: 10px; padding: 4px 6px; margin: 0;
+        background: rgba(0,0,0,0.08); color: white; font-weight: 500;
     }
-    div[data-testid="stMetricValue"] { font-size: 20px; }
+
+    div[data-testid="stMetricValue"] {
+        font-size: 20px; font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Navigation Pills ──────────────────────────────── */
+    .stRadio > div {
+        background: var(--surface-alt);
+        border-radius: var(--radius-lg);
+        padding: 4px;
+        border: 1px solid var(--border);
+    }
+    .stRadio > div > label {
+        border-radius: var(--radius-md) !important;
+        transition: all var(--transition) !important;
+        font-weight: 500 !important;
+    }
+    .stRadio > div > label[data-checked="true"],
+    .stRadio > div > label:has(input:checked) {
+        background: var(--accent) !important;
+        color: white !important;
+        box-shadow: var(--shadow-sm) !important;
+    }
+
+    /* ── Sub-tabs ────────────────────────────────────── */
+    button[data-baseweb="tab"] {
+        border-radius: var(--radius-sm) !important;
+        transition: all var(--transition) !important;
+        font-weight: 500 !important;
+    }
+    button[data-baseweb="tab"][aria-selected="true"] {
+        background: var(--accent-bg) !important;
+        color: var(--accent) !important;
+    }
+
+    /* ── DataFrames ──────────────────────────────────── */
+    [data-testid="stDataFrame"] {
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+
+    /* ── Sidebar Polish ──────────────────────────────── */
+    section[data-testid="stSidebar"] {
+        border-right: 1px solid var(--border);
+    }
+    section[data-testid="stSidebar"] .stSelectbox,
+    section[data-testid="stSidebar"] .stMultiSelect {
+        min-height: 38px;
+    }
+
+    /* ── Desktop-only: Hide toolbar ────────────────── */
+    @media (min-width: 769px) {
+        [data-testid="stToolbar"] { display: none !important; }
+    }
 
     /* ── Tablet (≤ 768px) ──────────────────────────── */
     @media (max-width: 768px) {
         .metric-card { padding: 10px 12px; }
-        .metric-card h3 { font-size: 11px; }
+        .metric-card h3 { font-size: 10px; }
         .metric-card h1 { font-size: 18px; }
         .signal-box { padding: 10px; font-size: 16px; }
-        .grade-card { padding: 8px 4px; margin: 2px 0; }
         .grade-card .grade-label { font-size: 9px; }
-        .grade-card .grade-value { font-size: 16px; }
+        .grade-card .grade-value { font-size: 17px; }
         .grade-card .grade-score { font-size: 8px; }
         div[data-testid="stMetricValue"] { font-size: 16px; }
         div[data-testid="column"] {
@@ -119,6 +222,56 @@ st.markdown("""
             font-size: 12px !important;
             padding: 6px 8px !important;
         }
+
+        /* ── Mobile Sidebar Toggle ─────────────────── */
+        [data-testid="stToolbar"] {
+            position: fixed !important;
+            top: auto !important;
+            bottom: 16px !important;
+            left: 16px !important;
+            right: auto !important;
+            width: auto !important;
+            height: auto !important;
+            z-index: 999999 !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
+        [data-testid="stToolbar"] > * {
+            display: none !important;
+        }
+        [data-testid="stToolbar"] [data-testid="stExpandSidebarButton"] {
+            display: flex !important;
+        }
+        [data-testid="stExpandSidebarButton"] button {
+            width: 48px !important;
+            height: 48px !important;
+            border-radius: 50% !important;
+            background: var(--accent) !important;
+            color: white !important;
+            box-shadow: 0 4px 16px rgba(99,102,241,0.35) !important;
+            border: none !important;
+            font-size: 22px !important;
+            cursor: pointer !important;
+            transition: transform 0.2s, box-shadow 0.2s !important;
+        }
+        [data-testid="stExpandSidebarButton"] button:hover {
+            transform: scale(1.1) !important;
+            box-shadow: 0 6px 20px rgba(99,102,241,0.45) !important;
+        }
+        [data-testid="stSidebarCollapseButton"] button {
+            min-width: 44px !important;
+            min-height: 44px !important;
+        }
+        section[data-testid="stSidebar"] .stSelectbox,
+        section[data-testid="stSidebar"] .stMultiSelect {
+            min-height: 44px;
+        }
+        section[data-testid="stSidebar"] .stSlider [role="slider"] {
+            width: 20px !important;
+            height: 20px !important;
+        }
     }
 
     /* ── Large Phone (≤ 600px) ─────────────────────── */
@@ -127,10 +280,6 @@ st.markdown("""
             min-width: 45% !important;
             flex: 1 1 45% !important;
         }
-        .grade-card {
-            padding: 10px 6px;
-            margin: 3px 1px;
-        }
         .grade-card .grade-label { font-size: 10px; }
         .grade-card .grade-value { font-size: 18px; }
         .grade-card .grade-score { font-size: 9px; }
@@ -138,28 +287,24 @@ st.markdown("""
             padding-left: 0.5rem !important;
             padding-right: 0.5rem !important;
         }
-        /* Increase touch targets for all buttons */
-        button {
-            min-height: 44px !important;
-        }
-        /* Radio button mobile optimization */
+        button { min-height: 44px !important; }
         .stRadio > div {
             gap: 2px !important;
+            padding: 3px !important;
         }
         .stRadio > div > label {
             padding: 8px 10px !important;
             font-size: 14px !important;
         }
-        /* Let Plotly charts use full bleed width */
         [data-testid="stPlotlyChart"] {
             margin-left: -0.5rem;
             margin-right: -0.5rem;
         }
-        /* Touch-friendly dataframe scrolling */
         [data-testid="stDataFrame"] {
             -webkit-overflow-scrolling: touch;
+            max-height: 340px;
+            font-size: 12px;
         }
-        /* Sub-tab buttons smaller */
         button[data-baseweb="tab"] {
             font-size: 11px !important;
             padding: 6px 6px !important;
@@ -180,9 +325,6 @@ st.markdown("""
             padding: 4px 6px !important;
         }
     }
-
-    /* ── Hide Streamlit toolbar ────────────────────── */
-    [data-testid="stToolbar"] { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -197,7 +339,9 @@ if not render_auth_page():
 
 # ── Mobile Detection ─────────────────────────────────────
 init_mobile_detect()
+auto_collapse_sidebar()
 _mobile = is_mobile()
+_plotly_cfg = {"displayModeBar": False} if _mobile else {}
 _current_user = get_current_user()
 
 # ═══════════════════════════════════════════════════════════
@@ -996,7 +1140,7 @@ def _render_valuation_tab(results: dict):
     if _mobile:
         fig = chart_valuation_comparison(valuation, current_price, _cur)
         if fig:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=_plotly_cfg)
 
         dcf_result = valuation.get("models", {}).get("dcf", {})
         mc_dist = dcf_result.get("mc_distribution")
@@ -1004,13 +1148,13 @@ def _render_valuation_tab(results: dict):
         if mc_dist is not None and len(mc_dist) > 0:
             fig_mc = chart_monte_carlo(mc_dist, current_price, fv, _cur)
             if fig_mc:
-                st.plotly_chart(fig_mc, use_container_width=True)
+                st.plotly_chart(fig_mc, use_container_width=True, config=_plotly_cfg)
     else:
         col1, col2 = st.columns(2)
         with col1:
             fig = chart_valuation_comparison(valuation, current_price, _cur)
             if fig:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, config=_plotly_cfg)
 
         with col2:
             dcf_result = valuation.get("models", {}).get("dcf", {})
@@ -1019,7 +1163,7 @@ def _render_valuation_tab(results: dict):
             if mc_dist is not None and len(mc_dist) > 0:
                 fig_mc = chart_monte_carlo(mc_dist, current_price, fv, _cur)
                 if fig_mc:
-                    st.plotly_chart(fig_mc, use_container_width=True)
+                    st.plotly_chart(fig_mc, use_container_width=True, config=_plotly_cfg)
 
     # Reverse DCF
     st.subheader("Reverse DCF — 시장 내재 기대치")
@@ -1106,7 +1250,7 @@ def _render_quality_tab(results: dict):
         # Radar chart
         fig = chart_quality_radar(data, piotroski, altman, eva)
         if fig:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=_plotly_cfg)
 
         # EVA & ROIC
         st.markdown("### EVA & ROIC Spread")
@@ -1149,7 +1293,7 @@ def _render_quality_tab(results: dict):
             # Radar chart
             fig = chart_quality_radar(data, piotroski, altman, eva)
             if fig:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, config=_plotly_cfg)
 
             # EVA & ROIC
             st.markdown("### EVA & ROIC Spread")
@@ -1190,20 +1334,20 @@ def _render_financials_tab(results: dict):
     if _mobile:
         fig = chart_revenue_profit(data, _cur)
         if fig:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=_plotly_cfg)
         fig = chart_margins(data)
         if fig:
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config=_plotly_cfg)
     else:
         col1, col2 = st.columns(2)
         with col1:
             fig = chart_revenue_profit(data, _cur)
             if fig:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, config=_plotly_cfg)
         with col2:
             fig = chart_margins(data)
             if fig:
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, config=_plotly_cfg)
 
     # Financial statements
     sub_tabs = st.tabs(["Income Statement", "Balance Sheet", "Cash Flow"])
@@ -1456,11 +1600,11 @@ def _render_risk_quant_tab(results: dict):
     # Charts
     fig_price = chart_price_with_ma(data)
     if fig_price:
-        st.plotly_chart(fig_price, use_container_width=True)
+        st.plotly_chart(fig_price, use_container_width=True, config=_plotly_cfg)
 
     fig_dd = chart_drawdown(data)
     if fig_dd:
-        st.plotly_chart(fig_dd, use_container_width=True)
+        st.plotly_chart(fig_dd, use_container_width=True, config=_plotly_cfg)
 
 
 def _render_macro_tab(results: dict):
@@ -1628,7 +1772,7 @@ def display_comparison(all_results: list):
     valuations = [r["valuation"] for r in all_results]
     fig = chart_comparison_heatmap(tickers_data, valuations)
     if fig:
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=_plotly_cfg)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -1946,7 +2090,7 @@ def _render_guru_sector_chart(holdings: list):
         )
         fig.update_traces(textposition="inside", textinfo="percent+label")
         fig.update_layout(height=400, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config=_plotly_cfg)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -2467,12 +2611,12 @@ def display_portfolio_tab():
         # Equity curve
         st.plotly_chart(
             chart_portfolio_equity_curve(nav, bench_nav),
-            use_container_width=True,
+            use_container_width=True, config=_plotly_cfg,
         )
         # Drawdown
         st.plotly_chart(
             chart_portfolio_drawdown(nav),
-            use_container_width=True,
+            use_container_width=True, config=_plotly_cfg,
         )
         # Monthly returns
         st.subheader("📅 월별 수익률 (%)")
@@ -2486,27 +2630,27 @@ def display_portfolio_tab():
         if _mobile:
             st.plotly_chart(
                 chart_weight_allocation(weights, f"포트폴리오 비중 ({pf_data['scheme']})"),
-                use_container_width=True,
+                use_container_width=True, config=_plotly_cfg,
             )
             corr = correlation_matrix(prices)
             if not corr.empty:
                 st.plotly_chart(
                     chart_correlation_heatmap(corr),
-                    use_container_width=True,
+                    use_container_width=True, config=_plotly_cfg,
                 )
         else:
             col_w, col_corr = st.columns(2)
             with col_w:
                 st.plotly_chart(
                     chart_weight_allocation(weights, f"포트폴리오 비중 ({pf_data['scheme']})"),
-                    use_container_width=True,
+                    use_container_width=True, config=_plotly_cfg,
                 )
             with col_corr:
                 corr = correlation_matrix(prices)
                 if not corr.empty:
                     st.plotly_chart(
                         chart_correlation_heatmap(corr),
-                        use_container_width=True,
+                        use_container_width=True, config=_plotly_cfg,
                     )
         # Contribution
         contrib = contribution_by_ticker(prices, weights)
@@ -2521,7 +2665,7 @@ def display_portfolio_tab():
             if "rolling_sharpe" in rm and not rm["rolling_sharpe"].empty:
                 st.plotly_chart(
                     chart_rolling_sharpe(rm["rolling_sharpe"]),
-                    use_container_width=True,
+                    use_container_width=True, config=_plotly_cfg,
                 )
             # Alpha / Beta / Info Ratio
             if _mobile:
@@ -2543,16 +2687,30 @@ def display_portfolio_tab():
         fe = factor_exposure(nav)
         if fe:
             factor_cols = [c for c in fe if c not in ("alpha_daily", "r_squared")]
-            fc1, fc2, fc3 = st.columns([2, 2, 1])
-            with fc1:
-                for f in factor_cols[:3]:
-                    st.metric(f, f"{fe[f]:.4f}")
-            with fc2:
-                for f in factor_cols[3:]:
-                    st.metric(f, f"{fe[f]:.4f}")
-            with fc3:
-                st.metric("R²", f"{fe.get('r_squared', 0):.2%}")
-                st.metric("일별 Alpha", f"{fe.get('alpha_daily', 0):.6f}")
+            if _mobile:
+                fc1, fc2 = st.columns(2)
+                with fc1:
+                    for f in factor_cols[:3]:
+                        st.metric(f, f"{fe[f]:.4f}")
+                with fc2:
+                    for f in factor_cols[3:]:
+                        st.metric(f, f"{fe[f]:.4f}")
+                fc3, fc4 = st.columns(2)
+                with fc3:
+                    st.metric("R²", f"{fe.get('r_squared', 0):.2%}")
+                with fc4:
+                    st.metric("일별 Alpha", f"{fe.get('alpha_daily', 0):.6f}")
+            else:
+                fc1, fc2, fc3 = st.columns([2, 2, 1])
+                with fc1:
+                    for f in factor_cols[:3]:
+                        st.metric(f, f"{fe[f]:.4f}")
+                with fc2:
+                    for f in factor_cols[3:]:
+                        st.metric(f, f"{fe[f]:.4f}")
+                with fc3:
+                    st.metric("R²", f"{fe.get('r_squared', 0):.2%}")
+                    st.metric("일별 Alpha", f"{fe.get('alpha_daily', 0):.6f}")
         else:
             st.caption("Fama-French 팩터 데이터를 불러올 수 없습니다.")
 
@@ -2664,12 +2822,12 @@ def display_backtest_tab():
                 bt_result.benchmark_series,
                 title=f"백테스트 수익률 곡선 — {bt_result.strategy_name}",
             ),
-            use_container_width=True,
+            use_container_width=True, config=_plotly_cfg,
         )
         # Drawdown
         st.plotly_chart(
             chart_portfolio_drawdown(bt_result.nav_series),
-            use_container_width=True,
+            use_container_width=True, config=_plotly_cfg,
         )
         # Monthly returns
         st.subheader("📅 월별 수익률 (%)")
@@ -2683,7 +2841,7 @@ def display_backtest_tab():
         # Trade log
         st.plotly_chart(
             chart_backtest_trades(bt_result.trades_log),
-            use_container_width=True,
+            use_container_width=True, config=_plotly_cfg,
         )
 
         if bt_result.trades_log:
@@ -2873,9 +3031,8 @@ if st.session_state["active_tab"] == "analysis":
     if all_results:
         # ── Save Analysis Button ─────────────────────────
         if can_save_analysis():
-            _save_col1, _save_col2 = st.columns([1, 5])
-            with _save_col1:
-                if st.button(t("auth.save_analysis"), key="save_analysis_btn"):
+            if _mobile:
+                if st.button(t("auth.save_analysis"), key="save_analysis_btn", use_container_width=True):
                     try:
                         from src.db.data import save_analysis
                         user = get_current_user()
@@ -2891,6 +3048,25 @@ if st.session_state["active_tab"] == "analysis":
                             st.success(t("auth.saved"))
                     except Exception as e:
                         st.error(f"Save failed: {e}")
+            else:
+                _save_col1, _save_col2 = st.columns([1, 5])
+                with _save_col1:
+                    if st.button(t("auth.save_analysis"), key="save_analysis_btn"):
+                        try:
+                            from src.db.data import save_analysis
+                            user = get_current_user()
+                            if user:
+                                for r in all_results:
+                                    _d = r.get("data", {})
+                                    save_analysis(
+                                        user_id=user["id"],
+                                        ticker=_d.get("ticker", ""),
+                                        company_name=_d.get("name", ""),
+                                        results_json=r,
+                                    )
+                                st.success(t("auth.saved"))
+                        except Exception as e:
+                            st.error(f"Save failed: {e}")
 
         if len(all_results) == 1:
             display_single_ticker(all_results[0])
