@@ -111,34 +111,75 @@ def collapse_sidebar_now():
 
 
 def _inject_collapse_js(scroll_top: bool = False):
-    """Inject JS to click the sidebar collapse button and optionally scroll to top."""
-    extra_js = ""
+    """Inject JS to click the sidebar collapse button and optionally scroll to top.
+
+    Uses multi-fallback selectors for Streamlit version compatibility
+    and a MutationObserver fallback if the button isn't rendered yet.
+    """
+    scroll_js = ""
     if scroll_top:
-        extra_js = """
-                // Scroll main content to top
-                const targets = [
-                    window.parent.document.querySelector('[data-testid="stAppViewContainer"]'),
-                    window.parent.document.querySelector('[data-testid="stMain"]'),
-                    window.parent.document.querySelector('section.main'),
+        scroll_js = """
+                // Scroll every possible container to top
+                var scrollTargets = [
+                    doc.querySelector('[data-testid="stAppViewContainer"]'),
+                    doc.querySelector('[data-testid="stMain"]'),
+                    doc.querySelector('[data-testid="stMainBlockContainer"]'),
+                    doc.querySelector('[data-testid="stVerticalBlock"]'),
+                    doc.querySelector('section.main'),
                 ];
-                for (const el of targets) {
-                    if (el) { el.scrollTo({top: 0, behavior: 'smooth'}); }
+                for (var i = 0; i < scrollTargets.length; i++) {
+                    if (scrollTargets[i]) { scrollTargets[i].scrollTop = 0; }
                 }
-                window.parent.scrollTo({top: 0, behavior: 'smooth'});
+                window.parent.scrollTo(0, 0);
+                doc.documentElement.scrollTop = 0;
         """
     if components:
         components.html(
             f"""
             <script>
             (function() {{
-                // Small delay to let Streamlit finish rendering after rerun
+                var doc = window.parent.document;
+
+                // Multi-fallback selectors for sidebar collapse button
+                var SELECTORS = [
+                    '[data-testid="stSidebarCollapseButton"] button',
+                    '[data-testid="collapsedControl"] button',
+                    'button[aria-label="Close sidebar"]',
+                    'button[aria-label="Close sidebar navigation"]',
+                    'section[data-testid="stSidebar"] button[kind="header"]',
+                ];
+
+                function findCollapseBtn() {{
+                    for (var i = 0; i < SELECTORS.length; i++) {{
+                        var btn = doc.querySelector(SELECTORS[i]);
+                        if (btn) return btn;
+                    }}
+                    return null;
+                }}
+
+                function doCollapse() {{
+                    var btn = findCollapseBtn();
+                    if (btn) {{
+                        btn.click();
+                        {scroll_js}
+                        return true;
+                    }}
+                    return false;
+                }}
+
+                // Attempt after 300ms (most common case)
                 setTimeout(function() {{
-                    const btn = window.parent.document.querySelector(
-                        '[data-testid="stSidebarCollapseButton"] button'
-                    );
-                    if (btn) {{ btn.click(); }}
-                    {extra_js}
-                }}, 100);
+                    if (doCollapse()) return;
+
+                    // Fallback: MutationObserver waits up to 3s for the button
+                    if (typeof MutationObserver !== 'undefined') {{
+                        var observer = new MutationObserver(function(mutations, obs) {{
+                            if (doCollapse()) {{ obs.disconnect(); }}
+                        }});
+                        observer.observe(doc.body, {{ childList: true, subtree: true }});
+                        setTimeout(function() {{ observer.disconnect(); }}, 3000);
+                    }}
+                }}, 300);
             }})();
             </script>
             """,

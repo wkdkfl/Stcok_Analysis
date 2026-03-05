@@ -328,30 +328,36 @@ st.markdown("""
             padding: 6px 8px !important;
         }
 
-        /* ── Mobile Sidebar Toggle (FAB) ───────────── */
+        /* ── Mobile Sidebar Toggle (FAB — top-left) ── */
         [data-testid="stExpandSidebarButton"] {
             visibility: visible !important;
             pointer-events: auto !important;
             position: fixed !important;
-            bottom: 80px !important;
-            left: 16px !important;
+            top: 12px !important;
+            left: 12px !important;
+            bottom: auto !important;
             z-index: 999999 !important;
         }
         [data-testid="stExpandSidebarButton"] button {
-            width: 48px !important;
-            height: 48px !important;
+            width: 44px !important;
+            height: 44px !important;
             border-radius: 50% !important;
             background: var(--accent) !important;
             color: white !important;
-            box-shadow: 0 4px 16px rgba(99,102,241,0.35) !important;
+            box-shadow: 0 2px 12px rgba(99,102,241,0.35) !important;
             border: none !important;
-            font-size: 22px !important;
+            font-size: 20px !important;
             cursor: pointer !important;
             transition: transform 0.2s, box-shadow 0.2s !important;
+            animation: fabPulse 0.6s ease 3 !important;
         }
         [data-testid="stExpandSidebarButton"] button:hover {
             transform: scale(1.1) !important;
-            box-shadow: 0 6px 20px rgba(99,102,241,0.45) !important;
+            box-shadow: 0 4px 16px rgba(99,102,241,0.45) !important;
+        }
+        @keyframes fabPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 2px 12px rgba(99,102,241,0.35); }
+            50% { transform: scale(1.15); box-shadow: 0 4px 20px rgba(99,102,241,0.55); }
         }
         [data-testid="stSidebarCollapseButton"] button {
             min-width: 44px !important;
