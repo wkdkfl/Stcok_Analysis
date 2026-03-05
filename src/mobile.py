@@ -111,26 +111,34 @@ def collapse_sidebar_now():
 
 
 def _inject_collapse_js(scroll_top: bool = False):
-    """Inject JS to click the sidebar collapse button."""
+    """Inject JS to click the sidebar collapse button and optionally scroll to top."""
     extra_js = ""
     if scroll_top:
         extra_js = """
                 // Scroll main content to top
-                const main = window.parent.document.querySelector(
-                    '[data-testid="stAppViewContainer"]'
-                );
-                if (main) { main.scrollTo({top: 0, behavior: 'smooth'}); }
+                const targets = [
+                    window.parent.document.querySelector('[data-testid="stAppViewContainer"]'),
+                    window.parent.document.querySelector('[data-testid="stMain"]'),
+                    window.parent.document.querySelector('section.main'),
+                ];
+                for (const el of targets) {
+                    if (el) { el.scrollTo({top: 0, behavior: 'smooth'}); }
+                }
+                window.parent.scrollTo({top: 0, behavior: 'smooth'});
         """
     if components:
         components.html(
             f"""
             <script>
             (function() {{
-                const btn = window.parent.document.querySelector(
-                    '[data-testid="stSidebarCollapseButton"] button'
-                );
-                if (btn) {{ btn.click(); }}
-                {extra_js}
+                // Small delay to let Streamlit finish rendering after rerun
+                setTimeout(function() {{
+                    const btn = window.parent.document.querySelector(
+                        '[data-testid="stSidebarCollapseButton"] button'
+                    );
+                    if (btn) {{ btn.click(); }}
+                    {extra_js}
+                }}, 100);
             }})();
             </script>
             """,
@@ -197,18 +205,36 @@ def render_mobile_bottom_nav(tab_keys: list, tab_labels: list, active_tab: str,
     # Escape backticks in items_html to be safe inside JS template literal
     items_html_escaped = items_html.replace("`", "\\`")
 
-    first_label = tab_labels[0] if tab_labels else ""
-    num_tabs = len(tab_keys)
+    # JSON encode tab labels for safe JS string matching
+    import json
+    tab_labels_js = json.dumps(tab_labels, ensure_ascii=False)
 
     components.html(
         f"""
         <script>
         (function() {{
             const parent = window.parent.document;
+            const TAB_LABELS = {tab_labels_js};
 
             // ── Remove existing nav (avoid duplicates on rerun) ──
             const existing = parent.querySelector('.mobile-bottom-nav');
             if (existing) existing.remove();
+
+            // ── Find the correct radio widget (main_nav_radio) ──
+            // Match by comparing label texts against our known tab labels
+            function findNavRadio() {{
+                const allRadios = parent.querySelectorAll('[data-testid="stRadio"]');
+                for (const radio of allRadios) {{
+                    const labels = radio.querySelectorAll('[role="radiogroup"] label');
+                    if (labels.length === TAB_LABELS.length) {{
+                        const firstText = labels[0] ? labels[0].textContent.trim() : '';
+                        if (firstText === TAB_LABELS[0]) {{
+                            return {{ widget: radio, labels: labels }};
+                        }}
+                    }}
+                }}
+                return null;
+            }}
 
             // ── Create & append bottom nav ──
             const nav = document.createElement('div');
@@ -216,32 +242,44 @@ def render_mobile_bottom_nav(tab_keys: list, tab_labels: list, active_tab: str,
             nav.innerHTML = `{items_html_escaped}`;
             parent.body.appendChild(nav);
 
-            // ── Click handlers: click corresponding radio label ──
+            // ── Click handlers ──
             nav.querySelectorAll('.nav-item').forEach(function(item) {{
                 item.addEventListener('click', function() {{
                     const idx = parseInt(this.getAttribute('data-idx'));
-                    const radios = parent.querySelectorAll('[data-testid="stRadio"] label');
-                    if (radios && radios[idx]) {{
-                        radios[idx].click();
+                    const found = findNavRadio();
+                    if (found && found.labels[idx]) {{
+                        // Temporarily make radio visible so click dispatches
+                        const container = found.widget.closest(
+                            '[data-testid="stElementContainer"]'
+                        ) || found.widget.parentElement;
+                        if (container) {{
+                            const prevStyle = container.style.cssText;
+                            container.style.cssText = 'position:absolute!important;opacity:0!important;pointer-events:auto!important;';
+                            found.labels[idx].click();
+                            // Re-hide after click propagates
+                            requestAnimationFrame(function() {{
+                                container.style.cssText = prevStyle;
+                            }});
+                        }} else {{
+                            found.labels[idx].click();
+                        }}
                     }}
+                    // Scroll main content to top
+                    const main = parent.querySelector('[data-testid="stAppViewContainer"]');
+                    if (main) main.scrollTo({{ top: 0, behavior: 'smooth' }});
                 }});
             }});
 
-            // ── Hide the st.radio nav widget ──
-            // Identify it by matching the number of labels and first label text
-            const radioWidgets = parent.querySelectorAll('[data-testid="stRadio"]');
-            radioWidgets.forEach(function(radio) {{
-                const labels = radio.querySelectorAll('[role="radiogroup"] label');
-                if (labels.length === {num_tabs}) {{
-                    const firstText = labels[0] && labels[0].textContent ? labels[0].textContent.trim() : '';
-                    if (firstText === '{first_label}') {{
-                        const container = radio.closest('[data-testid="stElementContainer"]') || radio.parentElement;
-                        if (container) {{
-                            container.style.cssText = 'position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;border:0!important;';
-                        }}
-                    }}
+            // ── Hide the main nav radio widget (keep functional) ──
+            const navRadio = findNavRadio();
+            if (navRadio) {{
+                const container = navRadio.widget.closest(
+                    '[data-testid="stElementContainer"]'
+                ) || navRadio.widget.parentElement;
+                if (container) {{
+                    container.style.cssText = 'position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important;border:0!important;';
                 }}
-            }});
+            }}
         }})();
         </script>
         """,

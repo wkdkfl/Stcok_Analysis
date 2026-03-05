@@ -235,13 +235,25 @@ st.markdown("""
         min-height: 38px;
     }
 
-    /* ── Hide Streamlit toolbar (visibility so children can override) ── */
+    /* ── Hide Streamlit default chrome ───────────────────── */
     [data-testid="stToolbar"] {
         visibility: hidden !important;
         pointer-events: none !important;
         height: 0 !important;
         overflow: visible !important;
     }
+    /* "Made with Streamlit" footer */
+    footer { display: none !important; }
+    /* Deploy button */
+    [data-testid="stAppDeployButton"],
+    [data-testid="stStatusWidget"],
+    .stDeployButton,
+    #MainMenu {
+        display: none !important;
+        visibility: hidden !important;
+    }
+    /* Streamlit header bar (decoration line) */
+    [data-testid="stDecoration"] { display: none !important; }
     /* Sidebar expand button: always visible on all screen sizes */
     [data-testid="stExpandSidebarButton"] {
         visibility: visible !important;
