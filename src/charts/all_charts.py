@@ -11,6 +11,19 @@ from src.market_context import (
     get_currency_symbol, get_chart_price_label, get_chart_value_label,
     format_chart_tick, get_chart_nav_label,
 )
+from src.mobile import is_mobile
+
+
+def _mh(desktop: int) -> int:
+    """Return mobile-optimised chart height (shrink by ~30%)."""
+    return int(desktop * 0.7) if is_mobile() else desktop
+
+
+def _mmargin(desktop: dict = None) -> dict:
+    """Return compact margins on mobile."""
+    if is_mobile():
+        return dict(l=25, r=10, t=32, b=24)
+    return desktop or dict(l=40, r=20, t=40, b=30)
 
 
 # ── Color Palette ────────────────────────────────────────
@@ -75,8 +88,8 @@ def chart_revenue_profit(data: Dict[str, Any], currency: str = "USD") -> Optiona
         title=dict(text="Revenue & Operating Income", font=dict(size=14)),
         yaxis_title=_unit_label,
         barmode="group",
-        height=350,
-        margin=dict(l=40, r=20, t=40, b=30),
+        height=_mh(350),
+        margin=_mmargin(),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     return fig
@@ -133,8 +146,8 @@ def chart_margins(data: Dict[str, Any]) -> Optional[go.Figure]:
         title=dict(text="Profitability Margins", font=dict(size=14)),
         yaxis_title="Margin (%)",
         yaxis=dict(ticksuffix="%"),
-        height=350,
-        margin=dict(l=40, r=20, t=40, b=30),
+        height=_mh(350),
+        margin=_mmargin(),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     return fig
@@ -195,8 +208,8 @@ def chart_valuation_comparison(valuation_results: Dict[str, Any],
     fig.update_layout(
         title=dict(text="Valuation Model Comparison", font=dict(size=14)),
         xaxis_title=f"Fair Value ({_sym})",
-        height=max(300, len(models) * 40),
-        margin=dict(l=100, r=60, t=40, b=30),
+        height=_mh(max(300, len(models) * 40)),
+        margin=_mmargin(dict(l=100, r=60, t=40, b=30)),
         yaxis=dict(autorange="reversed"),
     )
     return fig
@@ -240,8 +253,8 @@ def chart_monte_carlo(mc_distribution: np.ndarray,
         title=dict(text="DCF Monte Carlo (10,000 runs)", font=dict(size=14)),
         xaxis_title=f"Intrinsic Value ({_sym})",
         yaxis_title="Frequency",
-        height=350,
-        margin=dict(l=40, r=20, t=40, b=30),
+        height=_mh(350),
+        margin=_mmargin(),
         showlegend=False,
     )
     return fig
@@ -321,7 +334,7 @@ def chart_quality_radar(data: Dict[str, Any], piotroski: Dict,
         ),
         showlegend=False,
         title="Quality Radar",
-        height=400,
+        height=_mh(400),
         margin=dict(l=60, r=60, t=60, b=40),
     )
 
@@ -353,11 +366,11 @@ def chart_drawdown(data: Dict[str, Any]) -> Optional[go.Figure]:
         fillcolor="rgba(244,67,54,0.3)",
     ))
     fig.update_layout(
-        title=dict(text="Historical Drawdown", font=dict(size=14)),
+        title=dict(text="Historical Drawdown", font=dict(size=14 if not is_mobile() else 12)),
         yaxis_title="Drawdown (%)",
         yaxis=dict(ticksuffix="%"),
-        height=280,
-        margin=dict(l=40, r=20, t=40, b=30),
+        height=_mh(280),
+        margin=_mmargin(),
     )
     return fig
 
@@ -418,8 +431,8 @@ def chart_price_with_ma(data: Dict[str, Any]) -> Optional[go.Figure]:
     fig.update_layout(
         title=dict(text=f"{data.get('ticker', '')} — Price & Moving Averages", font=dict(size=14)),
         yaxis_title=get_chart_price_label(data.get("currency", "USD")),
-        height=380,
-        margin=dict(l=40, r=20, t=40, b=30),
+        height=_mh(380),
+        margin=_mmargin(),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         hovermode="x unified",
     )
@@ -506,8 +519,8 @@ def chart_comparison_heatmap(tickers_data: List[Dict[str, Any]],
 
     fig.update_layout(
         title="Multi-Ticker Comparison",
-        height=max(400, len(metrics) * 35),
-        margin=dict(l=120, r=20, t=50, b=30),
+        height=_mh(max(400, len(metrics) * 35)),
+        margin=_mmargin(dict(l=120, r=20, t=50, b=30)),
         yaxis=dict(autorange="reversed"),
     )
 
@@ -542,8 +555,8 @@ def chart_portfolio_equity_curve(
         xaxis_title="Date",
         yaxis_title=get_chart_nav_label(currency),
         hovermode="x unified",
-        height=420,
-        margin=dict(l=50, r=20, t=50, b=40),
+        height=_mh(420),
+        margin=_mmargin(dict(l=50, r=20, t=50, b=40)),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     return fig
@@ -568,8 +581,8 @@ def chart_portfolio_drawdown(nav: "pd.Series", title: str = "드로우다운") -
         title=title,
         xaxis_title="Date",
         yaxis_title="Drawdown (%)",
-        height=300,
-        margin=dict(l=50, r=20, t=50, b=40),
+        height=_mh(300),
+        margin=_mmargin(dict(l=50, r=20, t=50, b=40)),
     )
     return fig
 
@@ -589,8 +602,8 @@ def chart_correlation_heatmap(corr: "pd.DataFrame", title: str = "종목 간 상
     ))
     fig.update_layout(
         title=title,
-        height=max(350, len(corr) * 40),
-        margin=dict(l=80, r=20, t=50, b=40),
+        height=_mh(max(350, len(corr) * 40)),
+        margin=_mmargin(dict(l=80, r=20, t=50, b=40)),
     )
     return fig
 
@@ -617,8 +630,8 @@ def chart_weight_allocation(
     ))
     fig.update_layout(
         title=title,
-        height=380,
-        margin=dict(l=20, r=20, t=50, b=20),
+        height=_mh(380),
+        margin=_mmargin(dict(l=20, r=20, t=50, b=20)),
         showlegend=True,
     )
     return fig
@@ -643,8 +656,8 @@ def chart_rolling_sharpe(
         title=title,
         xaxis_title="Date",
         yaxis_title="Sharpe Ratio",
-        height=320,
-        margin=dict(l=50, r=20, t=50, b=40),
+        height=_mh(320),
+        margin=_mmargin(dict(l=50, r=20, t=50, b=40)),
     )
     return fig
 
@@ -685,8 +698,8 @@ def chart_backtest_trades(
         yaxis=dict(title=f"포트폴리오 가치 ({get_currency_symbol(currency)})"),
         yaxis2=dict(title=f"거래 비용 ({get_currency_symbol(currency)})", overlaying="y", side="right"),
         barmode="group",
-        height=380,
-        margin=dict(l=60, r=60, t=50, b=40),
+        height=_mh(380),
+        margin=_mmargin(dict(l=60, r=60, t=50, b=40)),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     return fig

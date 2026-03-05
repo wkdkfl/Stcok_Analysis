@@ -91,16 +91,47 @@ def auto_collapse_sidebar():
     if st.session_state.get("_sidebar_auto_collapsed"):
         return  # already collapsed once this session
     st.session_state["_sidebar_auto_collapsed"] = True
+    _inject_collapse_js()
+
+
+def collapse_sidebar_now():
+    """
+    Collapse the sidebar on mobile after a user action (e.g. Analyze,
+    Scan button click). Unlike auto_collapse_sidebar(), this fires
+    every time it's called — guarded only by is_mobile().
+    Also scrolls the main content to top for a smooth transition.
+    """
+    if not is_mobile():
+        return
+    # Check the flag set by on_click callbacks
+    if not st.session_state.get("_collapse_after_action"):
+        return
+    st.session_state["_collapse_after_action"] = False
+    _inject_collapse_js(scroll_top=True)
+
+
+def _inject_collapse_js(scroll_top: bool = False):
+    """Inject JS to click the sidebar collapse button."""
+    extra_js = ""
+    if scroll_top:
+        extra_js = """
+                // Scroll main content to top
+                const main = window.parent.document.querySelector(
+                    '[data-testid="stAppViewContainer"]'
+                );
+                if (main) { main.scrollTo({top: 0, behavior: 'smooth'}); }
+        """
     if components:
         components.html(
-            """
+            f"""
             <script>
-            (function() {
+            (function() {{
                 const btn = window.parent.document.querySelector(
                     '[data-testid="stSidebarCollapseButton"] button'
                 );
-                if (btn) { btn.click(); }
-            })();
+                if (btn) {{ btn.click(); }}
+                {extra_js}
+            }})();
             </script>
             """,
             height=0,
