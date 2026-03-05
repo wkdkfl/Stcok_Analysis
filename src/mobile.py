@@ -160,6 +160,96 @@ def mcols_ratio(desktop_ratio: list, mobile_ratio: list = None, gap: str = "smal
     return st.columns(ratio, gap=gap)
 
 
+def render_mobile_bottom_nav(tab_keys: list, tab_labels: list, active_tab: str,
+                             nav_icons: dict, nav_labels_short: dict, lang: str = "ko"):
+    """
+    Render a fixed bottom navigation bar on mobile devices.
+
+    Uses components.html() to inject the nav into the parent document's DOM,
+    bypassing Streamlit's HTML sanitizer (which strips onclick handlers).
+    Also visually hides the st.radio nav widget so only the bottom bar is shown.
+
+    Parameters
+    ----------
+    tab_keys : list[str]        e.g. ["analysis", "screener", "guru", ...]
+    tab_labels : list[str]      Translated radio labels (used to identify the radio widget)
+    active_tab : str            Currently active tab key
+    nav_icons : dict            key → emoji icon
+    nav_labels_short : dict     key → {lang: label}
+    lang : str                  Current UI language
+    """
+    if not components or not is_mobile():
+        return
+
+    # Build nav items HTML (no onclick — event listeners added via JS)
+    items_html = ""
+    for i, key in enumerate(tab_keys):
+        active_cls = "active" if key == active_tab else ""
+        icon = nav_icons.get(key, "📄")
+        lbl = nav_labels_short.get(key, {}).get(lang, key)
+        items_html += (
+            f'<div class="nav-item {active_cls}" data-idx="{i}">'
+            f'<span class="nav-icon">{icon}</span>'
+            f'<span class="nav-label">{lbl}</span>'
+            f'</div>'
+        )
+
+    # Escape backticks in items_html to be safe inside JS template literal
+    items_html_escaped = items_html.replace("`", "\\`")
+
+    first_label = tab_labels[0] if tab_labels else ""
+    num_tabs = len(tab_keys)
+
+    components.html(
+        f"""
+        <script>
+        (function() {{
+            const parent = window.parent.document;
+
+            // ── Remove existing nav (avoid duplicates on rerun) ──
+            const existing = parent.querySelector('.mobile-bottom-nav');
+            if (existing) existing.remove();
+
+            // ── Create & append bottom nav ──
+            const nav = document.createElement('div');
+            nav.className = 'mobile-bottom-nav';
+            nav.innerHTML = `{items_html_escaped}`;
+            parent.body.appendChild(nav);
+
+            // ── Click handlers: click corresponding radio label ──
+            nav.querySelectorAll('.nav-item').forEach(function(item) {{
+                item.addEventListener('click', function() {{
+                    const idx = parseInt(this.getAttribute('data-idx'));
+                    const radios = parent.querySelectorAll('[data-testid="stRadio"] label');
+                    if (radios && radios[idx]) {{
+                        radios[idx].click();
+                    }}
+                }});
+            }});
+
+            // ── Hide the st.radio nav widget ──
+            // Identify it by matching the number of labels and first label text
+            const radioWidgets = parent.querySelectorAll('[data-testid="stRadio"]');
+            radioWidgets.forEach(function(radio) {{
+                const labels = radio.querySelectorAll('[role="radiogroup"] label');
+                if (labels.length === {num_tabs}) {{
+                    const firstText = labels[0] && labels[0].textContent ? labels[0].textContent.trim() : '';
+                    if (firstText === '{first_label}') {{
+                        const container = radio.closest('[data-testid="stElementContainer"]') || radio.parentElement;
+                        if (container) {{
+                            container.style.cssText = 'position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;border:0!important;';
+                        }}
+                    }}
+                }}
+            }});
+        }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 def render_metrics_grid(metrics: list, desktop_cols: int = 4, mobile_cols: int = 2):
     """
     Render a grid of st.metric() items responsively.

@@ -75,7 +75,7 @@ from src.auth.permissions import (
     require_daily_limit, record_usage, get_daily_usage,
 )
 from src.auth.rate_limit import require_rate_limit
-from src.mobile import init_mobile_detect, is_mobile, auto_collapse_sidebar, collapse_sidebar_now, mcols, mcols_ratio, render_metrics_grid
+from src.mobile import init_mobile_detect, is_mobile, auto_collapse_sidebar, collapse_sidebar_now, mcols, mcols_ratio, render_metrics_grid, render_mobile_bottom_nav
 
 # ── Page Config ──────────────────────────────────────────
 st.set_page_config(
@@ -407,17 +407,6 @@ st.markdown("""
         .mobile-bottom-nav .nav-item.active .nav-label {
             color: var(--accent);
             font-weight: 600;
-        }
-
-        /* Hide default radio nav on mobile (replaced by bottom bar) */
-        .mobile-hide-nav .stRadio {
-            position: absolute !important;
-            width: 1px !important;
-            height: 1px !important;
-            overflow: hidden !important;
-            clip: rect(0,0,0,0) !important;
-            white-space: nowrap !important;
-            border: 0 !important;
         }
     }
 
@@ -3040,8 +3029,8 @@ _TAB_LABELS = [t(f"{_label_prefix}.{k}") for k in _TAB_KEYS]
 _current_idx = _TAB_KEYS.index(st.session_state["active_tab"]) if st.session_state["active_tab"] in _TAB_KEYS else 0
 
 if _mobile:
-    # ── Mobile: Hidden radio (state driver) + visible bottom nav bar ──
-    st.markdown('<div class="mobile-hide-nav">', unsafe_allow_html=True)
+    # ── Mobile: radio is kept for state management but hidden by JS ──
+    pass
 
 _selected_label = st.radio(
     "nav", _TAB_LABELS,
@@ -3056,8 +3045,7 @@ if _selected_key != st.session_state["active_tab"]:
     st.rerun()
 
 if _mobile:
-    st.markdown('</div>', unsafe_allow_html=True)
-    # ── Render bottom navigation bar via HTML ──
+    # ── Render bottom navigation bar (injected into parent DOM via JS) ──
     _NAV_ICONS = {
         "analysis": "📊", "screener": "🔎", "guru": "🏦",
         "portfolio": "💼", "backtest": "📈", "admin": "👑",
@@ -3071,23 +3059,13 @@ if _mobile:
         "admin": {"ko": "관리자", "en": "Admin"},
     }
     _cur_lang = st.session_state.get("language", "ko")
-    _nav_items_html = ""
-    for i, key in enumerate(_TAB_KEYS):
-        _active_cls = "active" if key == st.session_state["active_tab"] else ""
-        _icon = _NAV_ICONS.get(key, "📄")
-        _lbl = _NAV_LABELS_SHORT.get(key, {}).get(_cur_lang, key)
-        _nav_items_html += f'''
-            <div class="nav-item {_active_cls}" onclick="
-                const radios = window.parent.document.querySelectorAll('[data-testid=\\'stRadio\\'] label');
-                if (radios && radios[{i}]) {{ radios[{i}].click(); }}
-            ">
-                <span class="nav-icon">{_icon}</span>
-                <span class="nav-label">{_lbl}</span>
-            </div>
-        '''
-    st.markdown(
-        f'<div class="mobile-bottom-nav">{_nav_items_html}</div>',
-        unsafe_allow_html=True,
+    render_mobile_bottom_nav(
+        tab_keys=_TAB_KEYS,
+        tab_labels=_TAB_LABELS,
+        active_tab=st.session_state["active_tab"],
+        nav_icons=_NAV_ICONS,
+        nav_labels_short=_NAV_LABELS_SHORT,
+        lang=_cur_lang,
     )
 
 st.markdown("---")
